@@ -520,7 +520,7 @@ All values are loaded via `github.com/joho/godotenv` at startup. The `.env` file
 | Layer                | Technology                                      | Rationale                                                    |
 |----------------------|-------------------------------------------------|--------------------------------------------------------------|
 | Language             | **Go 1.26+** (latest stable)                    | Static binary, native concurrency, minimal runtime footprint |
-| Telegram SDK         | `github.com/go-telegram-bot-api/telegram-bot-api/v5` | Supports both long-poll and webhook modes; actively maintained |
+| Telegram SDK         | `github.com/go-telegram/bot` | Supports both long-poll and webhook modes; context-based |
 | HTTP Client          | `net/http` (stdlib) + `github.com/hashicorp/go-retryablehttp` | Configurable retry/back-off for PVWA calls    |
 | Webhook Server       | `net/http` (stdlib)                             | Webhook mode listener; no additional dependency required     |
 | Env Loading          | `github.com/joho/godotenv`                      | Twelve-Factor App config pattern                             |
@@ -1075,7 +1075,7 @@ cybarbot/
 
 | Package                                              | Version     | Purpose                          |
 |------------------------------------------------------|-------------|----------------------------------|
-| `github.com/go-telegram-bot-api/telegram-bot-api/v5` | `v5.5.1+`   | Telegram Bot API client          |
+| `github.com/go-telegram/bot` | `v1.21.0+`   | Telegram Bot API client          |
 | `github.com/joho/godotenv`                           | `v1.5.1+`   | `.env` file loading              |
 | `github.com/hashicorp/go-retryablehttp`              | `v0.7.7+`   | Retryable HTTP client            |
 
