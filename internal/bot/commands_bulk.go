@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+
+	"cybarbot/internal/cyberark"
 )
 
 // Bulk operations extensions to CommandHandler
