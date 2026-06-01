@@ -5,20 +5,32 @@ package cyberark
 
 type LogonResponse string // API returns raw string
 
+type AccountProperties struct {
+	Name     string `json:"Name"`
+	Folder   string `json:"Folder"`
+	Safe     string `json:"Safe"`
+	Address  string `json:"Address"`
+	UserName string `json:"UserName"`
+}
+
+type AccountDetails struct {
+	AccountID  string            `json:"AccountID"`
+	Properties AccountProperties `json:"Properties"`
+}
+
 type IncomingRequest struct {
-	RequestID         string `json:"RequestID"`
-	RequestorUserName string `json:"RequestorUserName"`
-	RequesterUserName string `json:"RequesterUserName"`
-	SafeName          string `json:"SafeName"`
-	AccountName       string `json:"AccountName"`
-	AccountAddress    string `json:"AccountAddress"`
-	Operation         string `json:"Operation"`
-	Status            int    `json:"Status"`
-	CreationDate      int64  `json:"CreationDate"`
-	ExpirationDate    int64  `json:"ExpirationDate"`
-	AccessFrom        int64  `json:"AccessFrom"`
-	AccessTo          int64  `json:"AccessTo"`
-	UserReason        string `json:"UserReason"`
+	RequestID         string         `json:"RequestID"`
+	RequestorUserName string         `json:"RequestorUserName"`
+	SafeName          string         `json:"SafeName"`
+	Operation         string         `json:"Operation"`
+	Status            int            `json:"Status"`
+	CreationDate      int64          `json:"CreationDate"`
+	ExpirationDate    int64          `json:"ExpirationDate"`
+	AccessFrom        int64          `json:"AccessFrom"`
+	AccessTo          int64          `json:"AccessTo"`
+	RequestorReason   string         `json:"RequestorReason"`
+	UserReason        string         `json:"UserReason"`
+	AccountDetails    AccountDetails `json:"AccountDetails"`
 }
 
 type IncomingRequestsResponse struct {
@@ -33,22 +45,20 @@ type ConfirmStep struct {
 }
 
 type IncomingRequestDetail struct {
-	RequestID         string        `json:"RequestID"`
-	RequestorUserName string        `json:"RequestorUserName"`
-	RequesterUserName string        `json:"RequesterUserName"`
-	SafeName          string        `json:"SafeName"`
-	AccountName       string        `json:"AccountName"`
-	AccountAddress    string        `json:"AccountAddress"`
-	AccessType        string        `json:"AccessType"`
-	Operation         string        `json:"Operation"`
-	CreationDate      int64         `json:"CreationDate"`
-	ExpirationDate    int64         `json:"ExpirationDate"`
-	AccessFrom        int64         `json:"AccessFrom"`
-	AccessTo          int64         `json:"AccessTo"`
-	Reason            string        `json:"Reason"`
-	UserReason        string        `json:"UserReason"`
-	Status            int           `json:"Status"`
-	ConfirmSteps      []ConfirmStep `json:"ConfirmSteps"`
+	RequestID         string         `json:"RequestID"`
+	RequestorUserName string         `json:"RequestorUserName"`
+	SafeName          string         `json:"SafeName"`
+	AccessType        string         `json:"AccessType"`
+	Operation         string         `json:"Operation"`
+	CreationDate      int64          `json:"CreationDate"`
+	ExpirationDate    int64          `json:"ExpirationDate"`
+	AccessFrom        int64          `json:"AccessFrom"`
+	AccessTo          int64          `json:"AccessTo"`
+	RequestorReason   string         `json:"RequestorReason"`
+	UserReason        string         `json:"UserReason"`
+	Status            int            `json:"Status"`
+	ConfirmSteps      []ConfirmStep  `json:"ConfirmSteps"`
+	AccountDetails    AccountDetails `json:"AccountDetails"`
 }
 
 type ActionRequest struct {

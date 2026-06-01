@@ -8,28 +8,25 @@ import (
 	"cybarbot/internal/cyberark"
 )
 
-func getRequester(reqor string, reqer string) string {
+func getRequester(reqor string) string {
 	if reqor != "" {
 		return reqor
-	}
-	if reqer != "" {
-		return reqer
 	}
 	return "Unknown"
 }
 
-func getAccountStr(accountName, accountAddress, operation string) (string, string) {
-	name := accountName
-	addr := accountAddress
+func getAccountStr(details cyberark.AccountDetails, operation string) (string, string) {
+	name := details.Properties.UserName
+	addr := details.Properties.Address
 
 	if name == "" && addr == "" && operation != "" {
 		// Attempt to extract from operation like "Connect with ca_adm on 10.206.48.197"
 		parts := strings.Split(operation, " on ")
 		if len(parts) == 2 {
-			addr = parts[1]
+			addr = strings.TrimSpace(parts[1])
 			nameParts := strings.Split(parts[0], "with ")
 			if len(nameParts) == 2 {
-				name = nameParts[1]
+				name = strings.TrimSpace(nameParts[1])
 			}
 		} else {
 			name = operation
@@ -68,6 +65,13 @@ func getTimeFrame(accessFrom, accessTo, creationDate, expirationDate int64) stri
 	return fmt.Sprintf("%s to %s", fromStr, toStr)
 }
 
+func formatTime(t int64) string {
+	if t <= 0 {
+		return "Unknown"
+	}
+	return time.Unix(t, 0).UTC().Format("2006-01-02 15:04 MST")
+}
+
 func formatRequestList(requests []cyberark.IncomingRequest, page, totalPages int) string {
 	if len(requests) == 0 {
 		return "✅ No pending requests"
@@ -78,8 +82,8 @@ func formatRequestList(requests []cyberark.IncomingRequest, page, totalPages int
 	sb.WriteString("─────────────────────────────────────────────\n")
 
 	for _, req := range requests {
-		requester := getRequester(req.RequestorUserName, req.RequesterUserName)
-		_, addr := getAccountStr(req.AccountName, req.AccountAddress, req.Operation)
+		requester := getRequester(req.RequestorUserName)
+		_, addr := getAccountStr(req.AccountDetails, req.Operation)
 		timeframe := getTimeFrame(req.AccessFrom, req.AccessTo, req.CreationDate, req.ExpirationDate)
 
 		sb.WriteString(fmt.Sprintf("[%s] %s → %s | %s | %s\n", req.RequestID, requester, req.SafeName, addr, timeframe))
@@ -94,25 +98,31 @@ func formatRequestDetail(req *cyberark.IncomingRequestDetail) string {
 	sb.WriteString(fmt.Sprintf("🔍 Request Details: %s\n", req.RequestID))
 	sb.WriteString("─────────────────────────────────────────────\n")
 	
-	requester := getRequester(req.RequestorUserName, req.RequesterUserName)
-	accountName, accountAddr := getAccountStr(req.AccountName, req.AccountAddress, req.Operation)
+	requester := getRequester(req.RequestorUserName)
+	accountName, accountAddr := getAccountStr(req.AccountDetails, req.Operation)
 	timeframe := getTimeFrame(req.AccessFrom, req.AccessTo, req.CreationDate, req.ExpirationDate)
-	reason := req.Reason
-	if reason == "" {
-		reason = req.UserReason
-	}
-	if reason == "" {
-		reason = "None"
-	}
 
-	sb.WriteString(fmt.Sprintf("Requester   : %s\n", requester))
-	sb.WriteString(fmt.Sprintf("Account User: %s\n", accountName))
-	sb.WriteString(fmt.Sprintf("Account Addr: %s\n", accountAddr))
-	sb.WriteString(fmt.Sprintf("Safe        : %s\n", req.SafeName))
-	sb.WriteString(fmt.Sprintf("Access Type : %s\n", req.AccessType))
-	sb.WriteString(fmt.Sprintf("Time Frame  : %s\n", timeframe))
-	sb.WriteString(fmt.Sprintf("Reason      : %s\n", reason))
-	sb.WriteString(fmt.Sprintf("Status      : %v\n", req.Status))
+	sb.WriteString(fmt.Sprintf("Requester    : %s\n", requester))
+	sb.WriteString(fmt.Sprintf("Address      : %s\n", accountAddr))
+	sb.WriteString(fmt.Sprintf("Account User : %s\n", accountName))
+	sb.WriteString(fmt.Sprintf("Account Name : %s\n", req.AccountDetails.Properties.Name))
+	sb.WriteString(fmt.Sprintf("Safe         : %s\n", req.SafeName))
+	sb.WriteString(fmt.Sprintf("Access Type  : %s\n", req.AccessType))
+	sb.WriteString(fmt.Sprintf("Time Frame   : %s\n", timeframe))
+	sb.WriteString(fmt.Sprintf("Expires At   : %s\n", formatTime(req.ExpirationDate)))
+	
+	reqReason := req.RequestorReason
+	if reqReason == "" {
+		reqReason = "None"
+	}
+	userReason := req.UserReason
+	if userReason == "" {
+		userReason = "None"
+	}
+	
+	sb.WriteString(fmt.Sprintf("Req Reason   : %s\n", reqReason))
+	sb.WriteString(fmt.Sprintf("User Reason  : %s\n", userReason))
+	sb.WriteString(fmt.Sprintf("Status       : %v\n", req.Status))
 	sb.WriteString("─────────────────────────────────────────────\n")
 	sb.WriteString("Workflow Steps:\n")
 	for _, step := range req.ConfirmSteps {
@@ -126,10 +136,10 @@ func formatNotification(req cyberark.IncomingRequestDetail) string {
 	sb.WriteString("──────────────────────────────────────────────────\n")
 	sb.WriteString("🔔 New Access Request\n\n")
 	
-	requester := getRequester(req.RequestorUserName, req.RequesterUserName)
-	accountName, accountAddr := getAccountStr(req.AccountName, req.AccountAddress, req.Operation)
+	requester := getRequester(req.RequestorUserName)
+	accountName, accountAddr := getAccountStr(req.AccountDetails, req.Operation)
 	timeframe := getTimeFrame(req.AccessFrom, req.AccessTo, req.CreationDate, req.ExpirationDate)
-	reason := req.Reason
+	reason := req.RequestorReason
 	if reason == "" {
 		reason = req.UserReason
 	}
@@ -146,7 +156,7 @@ func formatNotification(req cyberark.IncomingRequestDetail) string {
 	sb.WriteString(fmt.Sprintf("Time Frame   : %s\n", timeframe))
 	sb.WriteString(fmt.Sprintf("Reason       : %s\n", reason))
 	
-	creationTime := time.Unix(req.CreationDate, 0).UTC().Format("2006-01-02 15:04 MST")
+	creationTime := formatTime(req.CreationDate)
 	sb.WriteString(fmt.Sprintf("Received At  : %s\n", creationTime))
 	sb.WriteString("──────────────────────────────────────────────────\n")
 	return sb.String()
