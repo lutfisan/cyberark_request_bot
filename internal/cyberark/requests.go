@@ -1,20 +1,13 @@
 package cyberark
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
 func (a *AuthManager) GetIncomingRequests() ([]IncomingRequest, error) {
-	var rawJSON []byte
-	err := a.DoRequestWithReAuth("GET", "/PasswordVault/API/IncomingRequests?onlywaiting=true", nil, &rawJSON)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println("DEBUG_JSON_RESPONSE:", string(rawJSON))
-	
 	var resp IncomingRequestsResponse
-	if err := json.Unmarshal(rawJSON, &resp); err != nil {
+	err := a.DoRequestWithReAuth("GET", "/PasswordVault/API/IncomingRequests?onlywaiting=true", nil, &resp)
+	if err != nil {
 		return nil, err
 	}
 	return resp.IncomingRequests, nil
