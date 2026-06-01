@@ -237,13 +237,14 @@ func (h *CommandHandler) executeBulkAction(ctx context.Context, b *bot.Bot, chat
 	}
 
 	var err error
+	var resp *cyberark.BulkActionResponse
 	if isReject {
-		_, err = h.auth.BulkRejectRequests(fsmCtx.RequestIDs, finalReason)
+		resp, err = h.auth.BulkRejectRequests(fsmCtx.RequestIDs, finalReason)
 	} else {
-		_, err = h.auth.BulkConfirmRequests(fsmCtx.RequestIDs, finalReason)
+		resp, err = h.auth.BulkConfirmRequests(fsmCtx.RequestIDs, finalReason)
 	}
 
-	if err != nil {
+	if resp == nil && err != nil {
 		return err
 	}
 
@@ -252,7 +253,7 @@ func (h *CommandHandler) executeBulkAction(ctx context.Context, b *bot.Bot, chat
 		actionStr = "REJECT"
 	}
 
-	for _, reqID := range fsmCtx.RequestIDs {
+	for _, reqID := range resp.Successful {
 		AuditLog(actionStr, reqID, true, userID, username, finalReason)
 		if h.notifier != nil {
 			statusStr := "✅ CONFIRMED"
@@ -263,12 +264,21 @@ func (h *CommandHandler) executeBulkAction(ctx context.Context, b *bot.Bot, chat
 		}
 	}
 
+	for _, failed := range resp.Failed {
+		AuditLog(actionStr, failed.RequestID, false, userID, username, failed.Error)
+	}
+
 	statusStr := "Confirmed"
 	if isReject {
 		statusStr = "Rejected"
 	}
 
-	h.sendMessage(ctx, b, chatID, fmt.Sprintf("✅ Successfully %s %d requests.", statusStr, len(fsmCtx.RequestIDs)))
+	msgText := fmt.Sprintf("✅ Successfully %s %d requests.", statusStr, len(resp.Successful))
+	if len(resp.Failed) > 0 {
+		msgText += fmt.Sprintf("\n❌ Failed to %s %d requests.", strings.ToLower(statusStr), len(resp.Failed))
+	}
+
+	h.sendMessage(ctx, b, chatID, msgText)
 	h.fsm.Reset(chatID)
 	return nil
 }

@@ -34,29 +34,57 @@ func (a *AuthManager) RejectRequest(requestID string, reason string) error {
 }
 
 func (a *AuthManager) BulkConfirmRequests(requestIDs []string, reason string) (*BulkActionResponse, error) {
-	var items []BulkItem
+	resp := &BulkActionResponse{
+		Successful: make([]string, 0),
+		Failed: make([]struct {
+			RequestID string `json:"RequestID"`
+			Error     string `json:"Error"`
+		}, 0),
+	}
+
 	for _, id := range requestIDs {
-		items = append(items, BulkItem{RequestID: id, Reason: reason})
+		err := a.ConfirmRequest(id, reason)
+		if err != nil {
+			resp.Failed = append(resp.Failed, struct {
+				RequestID string `json:"RequestID"`
+				Error     string `json:"Error"`
+			}{RequestID: id, Error: err.Error()})
+		} else {
+			resp.Successful = append(resp.Successful, id)
+		}
 	}
-	payload := BulkActionRequest{BulkItems: items}
-	var resp BulkActionResponse
-	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/incomingrequests/confirm/bulk", payload, &resp)
-	if err != nil {
-		return nil, err
+
+	if len(resp.Failed) > 0 {
+		return resp, fmt.Errorf("some requests failed to confirm")
 	}
-	return &resp, nil
+
+	return resp, nil
 }
 
 func (a *AuthManager) BulkRejectRequests(requestIDs []string, reason string) (*BulkActionResponse, error) {
-	var items []BulkItem
+	resp := &BulkActionResponse{
+		Successful: make([]string, 0),
+		Failed: make([]struct {
+			RequestID string `json:"RequestID"`
+			Error     string `json:"Error"`
+		}, 0),
+	}
+
 	for _, id := range requestIDs {
-		items = append(items, BulkItem{RequestID: id, Reason: reason})
+		err := a.RejectRequest(id, reason)
+		if err != nil {
+			resp.Failed = append(resp.Failed, struct {
+				RequestID string `json:"RequestID"`
+				Error     string `json:"Error"`
+			}{RequestID: id, Error: err.Error()})
+		} else {
+			resp.Successful = append(resp.Successful, id)
+		}
 	}
-	payload := BulkActionRequest{BulkItems: items}
-	var resp BulkActionResponse
-	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/incomingrequests/reject/bulk", payload, &resp)
-	if err != nil {
-		return nil, err
+
+	if len(resp.Failed) > 0 {
+		return resp, fmt.Errorf("some requests failed to reject")
 	}
-	return &resp, nil
+
+	return resp, nil
 }
