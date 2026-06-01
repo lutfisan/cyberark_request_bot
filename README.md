@@ -63,6 +63,21 @@ For production, it is recommended to use `BOT_MODE=webhook`.
    - `WEBHOOK_SECRET_TOKEN=a_secure_random_string_min_32_chars`
 2. Ensure the bot is exposed securely over HTTPS via a reverse proxy (like Nginx or Traefik), or configure `WEBHOOK_TLS_CERT` and `WEBHOOK_TLS_KEY` to serve TLS directly.
 
+### 4. Running Behind a Proxy or NAT (No Public IP)
+
+If your server does not have a public IP address or sits behind a corporate proxy, direct Webhook mode will not work because Telegram cannot reach your server.
+
+**Option A: Long-Polling (Recommended)**
+Use `BOT_MODE=longpoll`. The bot will make outbound connections to fetch updates, which works perfectly through NATs and firewalls. To route traffic through an outbound proxy, pass standard Go proxy variables before running:
+```bash
+export HTTPS_PROXY="http://your-proxy-server:port"
+export HTTP_PROXY="http://your-proxy-server:port"
+./cybarbot
+```
+
+**Option B: Reverse Tunnels (If webhooks are strictly required)**
+Run a tunneling daemon like **Cloudflare Tunnels (`cloudflared`)** or **ngrok** alongside the bot. Set `TELEGRAM_WEBHOOK_URL` to the public tunnel URL, and the daemon will securely route inbound webhook traffic through your proxy down to the bot.
+
 ## Configuration Reference
 
 Key variables to configure in your `.env` file:
