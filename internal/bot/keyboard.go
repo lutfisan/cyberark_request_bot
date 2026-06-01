@@ -3,91 +3,105 @@ package bot
 import (
 	"fmt"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"cybarbot/internal/cyberark"
+	"github.com/go-telegram/bot/models"
 )
 
-func buildPaginationKeyboard(page, totalPages int) tgbotapi.InlineKeyboardMarkup {
-	var row []tgbotapi.InlineKeyboardButton
+func buildPaginationKeyboard(page, totalPages int) models.InlineKeyboardMarkup {
+	var row []models.InlineKeyboardButton
 
 	if page > 1 {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData("◀ Prev", fmt.Sprintf("req_page_%d", page-1)))
+		row = append(row, models.InlineKeyboardButton{Text: "◀ Prev", CallbackData: fmt.Sprintf("req_page_%d", page-1)})
 	} else {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData(" ", "noop"))
+		row = append(row, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
 	}
 
-	row = append(row, tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("Page %d/%d", page, totalPages), "noop"))
+	row = append(row, models.InlineKeyboardButton{Text: fmt.Sprintf("Page %d/%d", page, totalPages), CallbackData: "noop"})
 
 	if page < totalPages {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData("Next ▶", fmt.Sprintf("req_page_%d", page+1)))
+		row = append(row, models.InlineKeyboardButton{Text: "Next ▶", CallbackData: fmt.Sprintf("req_page_%d", page+1)})
 	} else {
-		row = append(row, tgbotapi.NewInlineKeyboardButtonData(" ", "noop"))
+		row = append(row, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
 	}
 
-	return tgbotapi.NewInlineKeyboardMarkup(row)
+	return models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{row}}
 }
 
-func buildConfirmReasonKeyboard(reqID string) tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Skip — No Reason", "confirm_skip_"+reqID),
-			tgbotapi.NewInlineKeyboardButtonData("✏️ Enter Reason", "confirm_reason_"+reqID),
-		),
-	)
+func buildConfirmReasonKeyboard(reqID string) models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "Skip — No Reason", CallbackData: "confirm_skip_" + reqID},
+				{Text: "✏️ Enter Reason", CallbackData: "confirm_reason_" + reqID},
+			},
+		},
+	}
 }
 
-func buildBulkConfirmReasonKeyboard() tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("Skip — No Reason", "bulk_confirm_skip"),
-			tgbotapi.NewInlineKeyboardButtonData("✏️ Enter Reason", "bulk_confirm_reason"),
-		),
-	)
+func buildBulkConfirmReasonKeyboard() models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "Skip — No Reason", CallbackData: "bulk_confirm_skip"},
+				{Text: "✏️ Enter Reason", CallbackData: "bulk_confirm_reason"},
+			},
+		},
+	}
 }
 
-func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[string]bool, isReject bool, allSelected bool) tgbotapi.InlineKeyboardMarkup {
-	var rows [][]tgbotapi.InlineKeyboardButton
+func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[string]bool, isReject bool, allSelected bool) models.InlineKeyboardMarkup {
+	var rows [][]models.InlineKeyboardButton
 
 	for _, req := range requests {
-		checkbox := "☐"
+		check := "⬜"
 		if selected[req.RequestID] {
-			checkbox = "☑"
+			check = "✅"
 		}
-		text := fmt.Sprintf("%s %s — %s / %s", checkbox, req.RequestID, req.RequesterUserName, req.SafeName)
-		action := fmt.Sprintf("toggle_%s", req.RequestID)
-		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(text, action),
-		))
+		
+		text := fmt.Sprintf("%s %s (%s)", check, req.SafeName, req.AccountName)
+		action := "toggle_" + req.RequestID
+		
+		rows = append(rows, []models.InlineKeyboardButton{
+			{Text: text, CallbackData: action},
+		})
 	}
 
-	toggleAllText := "☑ Select All"
+	var allCheck string
 	if allSelected {
-		toggleAllText = "☐ Deselect All"
-	}
-
-	var actionBtn tgbotapi.InlineKeyboardButton
-	if isReject {
-		actionBtn = tgbotapi.NewInlineKeyboardButtonData("❌ Reject Selected", "bulk_action_reject")
+		allCheck = "✅ Select All"
 	} else {
-		actionBtn = tgbotapi.NewInlineKeyboardButtonData("✅ Confirm Selected", "bulk_action_confirm")
+		allCheck = "⬜ Select All"
 	}
 
-	controlRow := tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(toggleAllText, "toggle_all"),
-		actionBtn,
-		tgbotapi.NewInlineKeyboardButtonData("🚫 Cancel", "cancel_bulk"),
-	)
-	rows = append(rows, controlRow)
+	rows = append(rows, []models.InlineKeyboardButton{
+		{Text: allCheck, CallbackData: "toggle_all"},
+	})
 
-	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+	var actionBtn models.InlineKeyboardButton
+	if isReject {
+		actionBtn = models.InlineKeyboardButton{Text: "❌ Reject Selected", CallbackData: "bulk_action_reject"}
+	} else {
+		actionBtn = models.InlineKeyboardButton{Text: "✅ Confirm Selected", CallbackData: "bulk_action_confirm"}
+	}
+
+	rows = append(rows, []models.InlineKeyboardButton{
+		actionBtn,
+		{Text: "🚫 Cancel", CallbackData: "cancel_bulk"},
+	})
+
+	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
 }
 
-func buildNotificationKeyboard(reqID string) tgbotapi.InlineKeyboardMarkup {
-	return tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("✅ Confirm", "notif_confirm_"+reqID),
-			tgbotapi.NewInlineKeyboardButtonData("❌ Reject", "notif_reject_"+reqID),
-			tgbotapi.NewInlineKeyboardButtonData("🔍 View Details", "notif_detail_"+reqID),
-		),
-	)
+func buildNotificationKeyboard(reqID string) models.InlineKeyboardMarkup {
+	return models.InlineKeyboardMarkup{
+		InlineKeyboard: [][]models.InlineKeyboardButton{
+			{
+				{Text: "✅ Confirm", CallbackData: "notif_confirm_" + reqID},
+				{Text: "❌ Reject", CallbackData: "notif_reject_" + reqID},
+			},
+			{
+				{Text: "🔍 View Details", CallbackData: "notif_detail_" + reqID},
+			},
+		},
+	}
 }

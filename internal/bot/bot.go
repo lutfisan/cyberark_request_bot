@@ -5,105 +5,149 @@ import (
 	"fmt"
 	"log/slog"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"cybarbot/internal/config"
 	"cybarbot/internal/cyberark"
 	"cybarbot/internal/whitelist"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 )
 
 type Bot struct {
-	api        *tgbotapi.BotAPI
-	dispatcher *Dispatcher
-	notifier   *Notifier
-	cfg        *config.Config
-	fsm        *FSMManager
-	ws         *WebhookServer
+	api      *bot.Bot
+	notifier *Notifier
+	cfg      *config.Config
+	fsm      *FSMManager
+	ws       *WebhookServer
 }
 
 func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitelist, version string) (*Bot, error) {
-	api, err := tgbotapi.NewBotAPI(cfg.TelegramBotToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to init bot api: %w", err)
-	}
-	
-	api.Debug = (cfg.LogLevel == "debug")
-	slog.Info("authorized on account", "username", api.Self.UserName)
-
 	fsm := NewFSMManager()
 	
+	// We need cmdHandler for DefaultHandler, but cmdHandler needs notifier. Let's pre-declare them.
+	var cmdHandler *CommandHandler
+	
+	// 1. Setup Options
+	opts := []bot.Option{
+		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
+			if cmdHandler != nil {
+				cmdHandler.DefaultHandler(ctx, b, update)
+			}
+		}),
+		bot.WithMiddlewares(
+			PanicRecoveryMiddleware,
+			LoggingMiddleware,
+			WhitelistMiddleware(wl, cfg.WhitelistSilent, cfg.WhitelistRejectMsg),
+		),
+	}
+
+	// 2. Init Bot instance
+	b, err := bot.New(cfg.TelegramBotToken, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init bot: %w", err)
+	}
+
+	// 3. Setup Handlers
 	var notifier *Notifier
 	if cfg.NotifyEnabled {
-		notifier = NewNotifier(api, auth, cfg.PollIntervalSeconds, cfg.NotifyOnRestart, cfg.NotifyTelegramIDs, cfg.NotifyGroupIDs)
+		notifier = NewNotifier(b, auth, cfg.PollIntervalSeconds, cfg.NotifyOnRestart, cfg.NotifyTelegramIDs, cfg.NotifyGroupIDs)
 	}
+	cmdHandler = NewCommandHandler(auth, fsm, cfg.RequestsPageSize, version, notifier)
 
-	cmdHandler := NewCommandHandler(api, auth, fsm, cfg.RequestsPageSize, version, notifier)
-	dispatcher := NewDispatcher(api, wl, cmdHandler, cfg.WhitelistSilent, cfg.WhitelistRejectMsg)
+	// Routing setup
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && (update.Message.Text == "/start" || update.Message.Text == "/help") },
+		cmdHandler.HelpHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/status" },
+		cmdHandler.StatusHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/notify_status" },
+		cmdHandler.NotifyStatusHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/requests" },
+		cmdHandler.RequestsHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/confirmall" },
+		cmdHandler.ConfirmAllHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/rejectall" },
+		cmdHandler.RejectAllHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/cancel" },
+		cmdHandler.CancelHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 7 && update.Message.Text[:7] == "/detail" },
+		cmdHandler.DetailHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 8 && update.Message.Text[:8] == "/confirm" },
+		cmdHandler.ConfirmHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 7 && update.Message.Text[:7] == "/reject" },
+		cmdHandler.RejectHandler,
+	)
+	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.CallbackQuery != nil },
+		cmdHandler.CallbackHandler,
+	)
 
-	bot := &Bot{
-		api:        api,
-		dispatcher: dispatcher,
-		notifier:   notifier,
-		cfg:        cfg,
-		fsm:        fsm,
-	}
+	// In `go-telegram/bot`, the DefaultHandler is used for everything else.
+	// We need to re-assign it. Since `b.DefaultHandler` is private, we should actually pass it in `bot.New`
+	// but we couldn't because it depends on `cmdHandler` which requires `b` to send messages... actually `cmdHandler` doesn't hold `b` anymore!
+	// Yes it does not! So we can set it.
+	// Let's create `b` with all options together by doing it properly.
 
-	return bot, nil
+	return &Bot{
+		api:      b,
+		notifier: notifier,
+		cfg:      cfg,
+		fsm:      fsm,
+	}, nil
 }
 
-func (b *Bot) Start() error {
+func (b *Bot) Start(ctx context.Context) error {
 	if b.notifier != nil {
 		b.notifier.Start()
 	}
 
 	if b.cfg.BotMode == "webhook" {
-		wh, err := tgbotapi.NewWebhook(b.cfg.TelegramWebhookURL)
-		if err != nil {
-			return err
-		}
-		
-		_, err = b.api.Request(wh)
-		if err != nil {
-			return err
-		}
-		
-		info, err := b.api.GetWebhookInfo()
-		if err != nil {
-			return err
-		}
-		
-		if info.LastErrorDate != 0 {
-			slog.Warn("telegram webhook last error", "msg", info.LastErrorMessage)
-		}
-
 		ws, err := StartWebhookServer(
-			b.api, 
-			b.cfg.WebhookListenAddr, 
-			b.cfg.WebhookSecretToken, 
-			b.cfg.WebhookTLSCert, 
-			b.cfg.WebhookTLSKey, 
-			b.dispatcher,
+			b.api,
+			b.cfg.WebhookListenAddr,
+			b.cfg.WebhookTLSCert,
+			b.cfg.WebhookTLSKey,
 		)
 		if err != nil {
 			return err
 		}
 		b.ws = ws
-	} else {
-		// Long polling
-		_, err := b.api.Request(tgbotapi.DeleteWebhookConfig{}) // Ensure webhook is disabled
+		
+		_, err = b.api.SetWebhook(ctx, &bot.SetWebhookParams{
+			URL:         b.cfg.TelegramWebhookURL,
+			SecretToken: b.cfg.WebhookSecretToken,
+		})
 		if err != nil {
-			slog.Warn("failed to delete webhook before starting long polling", "error", err)
+			return err
 		}
 		
-		u := tgbotapi.NewUpdate(0)
-		u.Timeout = 60
-		updates := b.api.GetUpdatesChan(u)
+		slog.Info("started telegram bot in webhook mode")
+		go b.api.StartWebhook(ctx)
+	} else {
+		_, err := b.api.DeleteWebhook(ctx, &bot.DeleteWebhookParams{})
+		if err != nil {
+			slog.Warn("failed to delete webhook", "error", err)
+		}
 		
 		slog.Info("started long polling")
-		go func() {
-			for update := range updates {
-				b.dispatcher.ProcessUpdate(update)
-			}
-		}()
+		go b.api.Start(ctx)
 	}
 
 	return nil
@@ -116,7 +160,5 @@ func (b *Bot) Stop(ctx context.Context) {
 	
 	if b.ws != nil {
 		b.ws.Shutdown(ctx)
-	} else {
-		b.api.StopReceivingUpdates()
 	}
 }

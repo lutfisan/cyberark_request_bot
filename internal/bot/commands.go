@@ -1,18 +1,19 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math"
 	"strings"
 	"time"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"cybarbot/internal/cyberark"
+	"github.com/go-telegram/bot"
+	"github.com/go-telegram/bot/models"
 )
 
 type CommandHandler struct {
-	bot        *tgbotapi.BotAPI
 	auth       *cyberark.AuthManager
 	fsm        *FSMManager
 	pageSize   int
@@ -21,9 +22,8 @@ type CommandHandler struct {
 	notifier   *Notifier // reference for status command
 }
 
-func NewCommandHandler(bot *tgbotapi.BotAPI, auth *cyberark.AuthManager, fsm *FSMManager, pageSize int, version string, notifier *Notifier) *CommandHandler {
+func NewCommandHandler(auth *cyberark.AuthManager, fsm *FSMManager, pageSize int, version string, notifier *Notifier) *CommandHandler {
 	return &CommandHandler{
-		bot:        bot,
 		auth:       auth,
 		fsm:        fsm,
 		pageSize:   pageSize,
@@ -33,92 +33,160 @@ func NewCommandHandler(bot *tgbotapi.BotAPI, auth *cyberark.AuthManager, fsm *FS
 	}
 }
 
-func (h *CommandHandler) HandleCommand(update tgbotapi.Update) {
-	defer PanicRecovery(h.bot, update.Message.Chat.ID)
+// DefaultHandler handles unknown commands or FSM text states
+func (h *CommandHandler) DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	if update.Message == nil || update.Message.Text == "" {
+		return
+	}
 	
-	msg := update.Message
-	chatID := msg.Chat.ID
-	command := msg.Command()
+	chatID := update.Message.Chat.ID
+	text := update.Message.Text
 
-	// Any command resets FSM
-	h.fsm.Reset(chatID)
+	if strings.HasPrefix(text, "/") {
+		h.sendMessage(ctx, b, chatID, "Unknown command. Use /help for a list of commands.")
+		h.fsm.Reset(chatID)
+		return
+	}
+
+	fsmCtx := h.fsm.GetContext(chatID)
+	if fsmCtx.State == StateIdle {
+		return // Ignore random text messages
+	}
 
 	var err error
-	switch command {
-	case "start", "help":
-		err = h.handleHelp(chatID)
-	case "status":
-		err = h.handleStatus(chatID)
-	case "notify_status":
-		err = h.handleNotifyStatus(chatID)
-	case "requests":
-		err = h.handleRequests(chatID, 1)
-	case "detail":
-		args := msg.CommandArguments()
-		if args == "" {
-			h.sendMessage(chatID, "Usage: /detail <RequestID>")
-			return
+	username := update.Message.From.Username
+	userID := update.Message.From.ID
+
+	switch fsmCtx.State {
+	case StateWaitingConfirmReason:
+		if len(fsmCtx.RequestIDs) > 0 {
+			err = h.executeBulkAction(ctx, b, chatID, username, userID, text, false)
+		} else {
+			err = h.executeConfirm(ctx, b, chatID, fsmCtx.RequestID, username, userID, text)
 		}
-		err = h.handleDetail(chatID, args)
-	case "confirm":
-		args := msg.CommandArguments()
-		if args == "" {
-			h.sendMessage(chatID, "Usage: /confirm <RequestID>")
-			return
+	case StateWaitingRejectReason:
+		if len(fsmCtx.RequestIDs) > 0 {
+			err = h.executeBulkAction(ctx, b, chatID, username, userID, text, true)
+		} else {
+			err = h.executeReject(ctx, b, chatID, fsmCtx.RequestID, username, userID, text)
 		}
-		err = h.handleConfirm(chatID, args)
-	case "reject":
-		args := msg.CommandArguments()
-		if args == "" {
-			h.sendMessage(chatID, "Usage: /reject <RequestID>")
-			return
-		}
-		err = h.handleReject(chatID, args)
-	case "cancel":
-		h.sendMessage(chatID, "✅ Operation cancelled. State reset to IDLE.")
-	default:
-		h.sendMessage(chatID, "Unknown command. Use /help for a list of commands.")
+	case StateBulkConfirmSelect, StateBulkRejectSelect:
+		// Ignoring text while in bulk select mode
 	}
 
 	if err != nil {
-		slog.Error("command execution failed", "command", command, "error", err)
-		h.sendMessage(chatID, fmt.Sprintf("🔴 Error executing command: %v", err))
+		slog.Error("state execution failed", "state", fsmCtx.State, "error", err)
+		h.sendMessage(ctx, b, chatID, fmt.Sprintf("🔴 Error processing action: %v", err))
 	}
+	h.fsm.Reset(chatID)
 }
 
-func (h *CommandHandler) HandleCallback(update tgbotapi.Update) {
-	defer PanicRecovery(h.bot, update.CallbackQuery.Message.Chat.ID)
+func (h *CommandHandler) HelpHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	h.handleHelp(ctx, b, chatID)
+}
+
+func (h *CommandHandler) StatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	h.handleStatus(ctx, b, chatID)
+}
+
+func (h *CommandHandler) NotifyStatusHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	h.handleNotifyStatus(ctx, b, chatID)
+}
+
+func (h *CommandHandler) RequestsHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	h.handleRequests(ctx, b, chatID, 1)
+}
+
+func (h *CommandHandler) DetailHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
 	
+	args := getCommandArgs(update.Message.Text)
+	if args == "" {
+		h.sendMessage(ctx, b, chatID, "Usage: /detail <RequestID>")
+		return
+	}
+	h.handleDetail(ctx, b, chatID, args)
+}
+
+func (h *CommandHandler) ConfirmHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	
+	args := getCommandArgs(update.Message.Text)
+	if args == "" {
+		h.sendMessage(ctx, b, chatID, "Usage: /confirm <RequestID>")
+		return
+	}
+	h.handleConfirm(ctx, b, chatID, args)
+}
+
+func (h *CommandHandler) RejectHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	
+	args := getCommandArgs(update.Message.Text)
+	if args == "" {
+		h.sendMessage(ctx, b, chatID, "Usage: /reject <RequestID>")
+		return
+	}
+	h.handleReject(ctx, b, chatID, args)
+}
+
+func (h *CommandHandler) CancelHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	h.sendMessage(ctx, b, chatID, "✅ Operation cancelled. State reset to IDLE.")
+}
+
+func (h *CommandHandler) CallbackHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	cb := update.CallbackQuery
-	chatID := cb.Message.Chat.ID
+	var chatID int64
+	if msg := cb.Message.Message; msg != nil {
+		chatID = msg.Chat.ID
+	} else if msg := cb.Message.InaccessibleMessage; msg != nil {
+		chatID = msg.Chat.ID
+	}
 	data := cb.Data
 
 	// Acknowledge callback immediately
-	callbackCfg := tgbotapi.NewCallback(cb.ID, "")
-	h.bot.Request(callbackCfg)
+	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
+		CallbackQueryID: cb.ID,
+	})
 
 	var err error
 	if strings.HasPrefix(data, "req_page_") {
 		var page int
 		fmt.Sscanf(data, "req_page_%d", &page)
-		err = h.handleRequests(chatID, page)
+		err = h.handleRequests(ctx, b, chatID, page)
 	} else if strings.HasPrefix(data, "confirm_skip_") {
 		reqID := strings.TrimPrefix(data, "confirm_skip_")
-		err = h.executeConfirm(chatID, reqID, cb.From.UserName, int64(cb.From.ID), "")
+		err = h.executeConfirm(ctx, b, chatID, reqID, cb.From.Username, cb.From.ID, "")
 	} else if strings.HasPrefix(data, "confirm_reason_") {
 		reqID := strings.TrimPrefix(data, "confirm_reason_")
-		ctx := h.fsm.SetState(chatID, StateWaitingConfirmReason)
-		ctx.RequestID = reqID
-		h.sendMessage(chatID, "Please type your reason:")
+		fsmCtx := h.fsm.SetState(chatID, StateWaitingConfirmReason)
+		fsmCtx.RequestID = reqID
+		h.sendMessage(ctx, b, chatID, "Please type your reason:")
 	} else if strings.HasPrefix(data, "notif_confirm_") {
 		reqID := strings.TrimPrefix(data, "notif_confirm_")
-		err = h.handleConfirm(chatID, reqID)
+		err = h.handleConfirm(ctx, b, chatID, reqID)
 	} else if strings.HasPrefix(data, "notif_reject_") {
 		reqID := strings.TrimPrefix(data, "notif_reject_")
-		err = h.handleReject(chatID, reqID)
+		err = h.handleReject(ctx, b, chatID, reqID)
 	} else if strings.HasPrefix(data, "notif_detail_") {
 		reqID := strings.TrimPrefix(data, "notif_detail_")
-		err = h.handleDetail(chatID, reqID)
+		err = h.handleDetail(ctx, b, chatID, reqID)
+	} else if strings.HasPrefix(data, "toggle_") || data == "bulk_action_confirm" || data == "bulk_action_reject" || data == "cancel_bulk" || data == "bulk_confirm_skip" || data == "bulk_confirm_reason" {
+		// Bulk handlers will be moved to commands_bulk.go but called from here
+		err = h.handleBulkCallback(ctx, b, update)
 	} else if data == "noop" {
 		// Do nothing
 	} else {
@@ -127,38 +195,28 @@ func (h *CommandHandler) HandleCallback(update tgbotapi.Update) {
 
 	if err != nil {
 		slog.Error("callback execution failed", "data", data, "error", err)
-		h.sendMessage(chatID, fmt.Sprintf("🔴 Error processing action: %v", err))
+		h.sendMessage(ctx, b, chatID, fmt.Sprintf("🔴 Error processing action: %v", err))
 	}
 }
 
-func (h *CommandHandler) HandleTextMessage(update tgbotapi.Update) {
-	defer PanicRecovery(h.bot, update.Message.Chat.ID)
-	
-	msg := update.Message
-	chatID := msg.Chat.ID
-	text := msg.Text
-
-	ctx := h.fsm.GetContext(chatID)
-	if ctx.State == StateIdle {
-		return // Ignore random text messages
+// Helpers
+func getCommandArgs(text string) string {
+	parts := strings.SplitN(text, " ", 2)
+	if len(parts) > 1 {
+		return strings.TrimSpace(parts[1])
 	}
-
-	var err error
-	switch ctx.State {
-	case StateWaitingConfirmReason:
-		err = h.executeConfirm(chatID, ctx.RequestID, msg.From.UserName, int64(msg.From.ID), text)
-	case StateWaitingRejectReason:
-		err = h.executeReject(chatID, ctx.RequestID, msg.From.UserName, int64(msg.From.ID), text)
-	}
-
-	if err != nil {
-		slog.Error("state execution failed", "state", ctx.State, "error", err)
-		h.sendMessage(chatID, fmt.Sprintf("🔴 Error processing action: %v", err))
-	}
-	h.fsm.Reset(chatID)
+	return ""
 }
 
-func (h *CommandHandler) handleHelp(chatID int64) error {
+func (h *CommandHandler) sendMessage(ctx context.Context, b *bot.Bot, chatID int64, text string) error {
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
+	})
+	return err
+}
+
+func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int64) error {
 	helpText := `🤖 **CybArBot Command Reference**
 
 /start - Welcome message and command list
@@ -169,15 +227,19 @@ func (h *CommandHandler) handleHelp(chatID int64) error {
 /detail <id> - Show full confirmation details for a request
 /confirm <id> - Confirm a single request (optional reason)
 /reject <id> - Reject a single request (mandatory reason)
+/confirmall - Bulk confirm multiple requests
+/rejectall - Bulk reject multiple requests
 /cancel - Abort any active multi-step operation
 `
-	msg := tgbotapi.NewMessage(chatID, helpText)
-	msg.ParseMode = "Markdown"
-	_, err := h.bot.Send(msg)
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      helpText,
+		ParseMode: models.ParseModeMarkdown,
+	})
 	return err
 }
 
-func (h *CommandHandler) handleStatus(chatID int64) error {
+func (h *CommandHandler) handleStatus(ctx context.Context, b *bot.Bot, chatID int64) error {
 	uptime := time.Since(h.startTime)
 	sessionStatus := "✅ Active"
 	if h.auth.Token() == "" {
@@ -190,17 +252,14 @@ Uptime           : %s
 CyberArk Session : %s
 `, h.botVersion, uptime.Round(time.Second), sessionStatus)
 
-	h.sendMessage(chatID, statusText)
-	return nil
+	return h.sendMessage(ctx, b, chatID, statusText)
 }
 
-func (h *CommandHandler) handleNotifyStatus(chatID int64) error {
+func (h *CommandHandler) handleNotifyStatus(ctx context.Context, b *bot.Bot, chatID int64) error {
 	if h.notifier == nil {
-		h.sendMessage(chatID, "Notification watcher is disabled.")
-		return nil
+		return h.sendMessage(ctx, b, chatID, "Notification watcher is disabled.")
 	}
 	
-	// Assuming notifier has a way to get stats
 	stats := h.notifier.GetStats()
 	
 	statusText := fmt.Sprintf(`🔔 Notification Watcher Status
@@ -212,11 +271,10 @@ Last Result    : %d seen, %d new, %d stale-edited
 Cache Size     : %d requests
 `, stats.PollInterval, stats.LastPoll.Format("2006-01-02 15:04:05 UTC"), stats.LastSeen, stats.LastNew, stats.LastStaleEdited, stats.CacheSize)
 
-	h.sendMessage(chatID, statusText)
-	return nil
+	return h.sendMessage(ctx, b, chatID, statusText)
 }
 
-func (h *CommandHandler) handleRequests(chatID int64, page int) error {
+func (h *CommandHandler) handleRequests(ctx context.Context, b *bot.Bot, chatID int64, page int) error {
 	requests, err := h.auth.GetIncomingRequests()
 	if err != nil {
 		return err
@@ -243,27 +301,30 @@ func (h *CommandHandler) handleRequests(chatID int64, page int) error {
 	pageRequests := requests[startIdx:endIdx]
 	text := formatRequestList(pageRequests, page, totalPages)
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	if total > 0 {
-		msg.ReplyMarkup = buildPaginationKeyboard(page, totalPages)
+	params := &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
 	}
 
-	_, err = h.bot.Send(msg)
+	if total > 0 {
+		params.ReplyMarkup = buildPaginationKeyboard(page, totalPages)
+	}
+
+	_, err = b.SendMessage(ctx, params)
 	return err
 }
 
-func (h *CommandHandler) handleDetail(chatID int64, reqID string) error {
+func (h *CommandHandler) handleDetail(ctx context.Context, b *bot.Bot, chatID int64, reqID string) error {
 	detail, err := h.auth.GetIncomingRequestDetail(reqID)
 	if err != nil {
 		return err
 	}
 
 	text := formatRequestDetail(detail)
-	h.sendMessage(chatID, text)
-	return nil
+	return h.sendMessage(ctx, b, chatID, text)
 }
 
-func (h *CommandHandler) handleConfirm(chatID int64, reqID string) error {
+func (h *CommandHandler) handleConfirm(ctx context.Context, b *bot.Bot, chatID int64, reqID string) error {
 	detail, err := h.auth.GetIncomingRequestDetail(reqID)
 	if err != nil {
 		return err
@@ -276,13 +337,15 @@ Account   : %s
 ─────────────────────────
 Add a reason?`, reqID, detail.RequesterUserName, detail.SafeName, detail.AccountName)
 
-	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ReplyMarkup = buildConfirmReasonKeyboard(reqID)
-	_, err = h.bot.Send(msg)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: buildConfirmReasonKeyboard(reqID),
+	})
 	return err
 }
 
-func (h *CommandHandler) executeConfirm(chatID int64, reqID, username string, userID int64, reason string) error {
+func (h *CommandHandler) executeConfirm(ctx context.Context, b *bot.Bot, chatID int64, reqID, username string, userID int64, reason string) error {
 	finalReason := ""
 	if reason == "" {
 		finalReason = "[CybArBot] Approved via CybArBot"
@@ -298,27 +361,25 @@ func (h *CommandHandler) executeConfirm(chatID int64, reqID, username string, us
 	AuditLog("CONFIRM", reqID, false, userID, username, finalReason)
 	
 	if h.notifier != nil {
-		h.notifier.UpdateNotificationMessage(reqID, fmt.Sprintf("✅ CONFIRMED by @%s at %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
+		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("✅ CONFIRMED by @%s at %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
 	}
 
 	text := fmt.Sprintf(`✅ Request %s Confirmed
 Reason : %s
 By     : @%s
 At     : %s`, reqID, finalReason, username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
-	h.sendMessage(chatID, text)
-	return nil
+	return h.sendMessage(ctx, b, chatID, text)
 }
 
-func (h *CommandHandler) handleReject(chatID int64, reqID string) error {
-	ctx := h.fsm.SetState(chatID, StateWaitingRejectReason)
-	ctx.RequestID = reqID
+func (h *CommandHandler) handleReject(ctx context.Context, b *bot.Bot, chatID int64, reqID string) error {
+	fsmCtx := h.fsm.SetState(chatID, StateWaitingRejectReason)
+	fsmCtx.RequestID = reqID
 
 	text := fmt.Sprintf("✏️ Please provide a rejection reason for %s\n(This field is mandatory):", reqID)
-	h.sendMessage(chatID, text)
-	return nil
+	return h.sendMessage(ctx, b, chatID, text)
 }
 
-func (h *CommandHandler) executeReject(chatID int64, reqID, username string, userID int64, reason string) error {
+func (h *CommandHandler) executeReject(ctx context.Context, b *bot.Bot, chatID int64, reqID, username string, userID int64, reason string) error {
 	finalReason := "[CybArBot] " + reason
 
 	err := h.auth.RejectRequest(reqID, finalReason)
@@ -329,18 +390,12 @@ func (h *CommandHandler) executeReject(chatID int64, reqID, username string, use
 	AuditLog("REJECT", reqID, false, userID, username, finalReason)
 	
 	if h.notifier != nil {
-		h.notifier.UpdateNotificationMessage(reqID, fmt.Sprintf("❌ REJECTED by @%s at %s — Reason: %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"), finalReason))
+		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("❌ REJECTED by @%s at %s — Reason: %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"), finalReason))
 	}
 
 	text := fmt.Sprintf(`❌ Request %s Rejected
 Reason : %s
 By     : @%s
 At     : %s`, reqID, finalReason, username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
-	h.sendMessage(chatID, text)
-	return nil
-}
-
-func (h *CommandHandler) sendMessage(chatID int64, text string) {
-	msg := tgbotapi.NewMessage(chatID, text)
-	h.bot.Send(msg)
+	return h.sendMessage(ctx, b, chatID, text)
 }
