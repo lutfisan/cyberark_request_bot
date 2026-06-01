@@ -78,6 +78,46 @@ export HTTP_PROXY="http://your-proxy-server:port"
 **Option B: Reverse Tunnels (If webhooks are strictly required)**
 Run a tunneling daemon like **Cloudflare Tunnels (`cloudflared`)** or **ngrok** alongside the bot. Set `TELEGRAM_WEBHOOK_URL` to the public tunnel URL, and the daemon will securely route inbound webhook traffic through your proxy down to the bot.
 
+### 5. Running as a Background Service (Auto-Start on Boot)
+
+To ensure the bot automatically starts when your server boots up, you can use `systemd` (Linux/Ubuntu) or Docker.
+
+**Using Systemd (Native)**
+Create a service file at `/etc/systemd/system/cybarbot.service`:
+```ini
+[Unit]
+Description=CybArBot Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=your_ubuntu_user
+WorkingDirectory=/path/to/cyberark_request_bot
+ExecStart=/path/to/cyberark_request_bot/cybarbot
+Restart=always
+RestartSec=10
+
+# Add proxies here if needed:
+# Environment="HTTPS_PROXY=http://your-proxy:port"
+# Environment="HTTP_PROXY=http://your-proxy:port"
+
+[Install]
+WantedBy=multi-user.target
+```
+Then enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable cybarbot
+sudo systemctl start cybarbot
+```
+
+**Using Docker Compose**
+Ensure your `docker-compose.yml` includes `restart: always` under the `cybarbot` service. Then start it in detached mode:
+```bash
+docker-compose up -d
+```
+The Docker daemon will automatically bring the bot back up after a reboot.
+
 ## Configuration Reference
 
 Key variables to configure in your `.env` file:
