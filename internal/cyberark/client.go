@@ -2,6 +2,7 @@ package cyberark
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -36,7 +37,16 @@ func NewClient(baseURL string, timeoutSecs int, maxRetries int, skipTLSVerify bo
 }
 
 func (c *Client) newRequest(method, endpoint string, body interface{}) (*retryablehttp.Request, error) {
-	req, err := retryablehttp.NewRequest(method, c.baseURL+endpoint, body)
+	var bodyBytes []byte
+	if body != nil {
+		var err error
+		bodyBytes, err = json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	req, err := retryablehttp.NewRequest(method, c.baseURL+endpoint, bodyBytes)
 	if err != nil {
 		return nil, err
 	}
