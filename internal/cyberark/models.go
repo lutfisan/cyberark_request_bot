@@ -42,9 +42,13 @@ type ActionRequest struct {
 	Reason string `json:"Reason"`
 }
 
+type BulkItem struct {
+	RequestID string `json:"RequestID"`
+	Reason    string `json:"Reason"`
+}
+
 type BulkActionRequest struct {
-	RequestIDs []string `json:"RequestIDs"`
-	Reason     string   `json:"Reason"`
+	BulkItems []BulkItem `json:"BulkItems"`
 }
 
 type BulkActionResponse struct {

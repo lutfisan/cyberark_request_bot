@@ -34,12 +34,13 @@ func (a *AuthManager) RejectRequest(requestID string, reason string) error {
 }
 
 func (a *AuthManager) BulkConfirmRequests(requestIDs []string, reason string) (*BulkActionResponse, error) {
-	payload := BulkActionRequest{
-		RequestIDs: requestIDs,
-		Reason:     reason,
+	var items []BulkItem
+	for _, id := range requestIDs {
+		items = append(items, BulkItem{RequestID: id, Reason: reason})
 	}
+	payload := BulkActionRequest{BulkItems: items}
 	var resp BulkActionResponse
-	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/IncomingRequests/Confirm", payload, &resp)
+	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/incomingrequests/confirm/bulk", payload, &resp)
 	if err != nil {
 		return nil, err
 	}
@@ -47,12 +48,13 @@ func (a *AuthManager) BulkConfirmRequests(requestIDs []string, reason string) (*
 }
 
 func (a *AuthManager) BulkRejectRequests(requestIDs []string, reason string) (*BulkActionResponse, error) {
-	payload := BulkActionRequest{
-		RequestIDs: requestIDs,
-		Reason:     reason,
+	var items []BulkItem
+	for _, id := range requestIDs {
+		items = append(items, BulkItem{RequestID: id, Reason: reason})
 	}
+	payload := BulkActionRequest{BulkItems: items}
 	var resp BulkActionResponse
-	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/IncomingRequests/Reject", payload, &resp)
+	err := a.DoRequestWithReAuth("POST", "/PasswordVault/API/incomingrequests/reject/bulk", payload, &resp)
 	if err != nil {
 		return nil, err
 	}
