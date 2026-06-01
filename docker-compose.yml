@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  cybarbot:
+    build: .
+    image: cybarbot:latest
+    container_name: cybarbot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/var/log/cybarbot
+    ports:
+      - "8443:8443" # For webhook mode
