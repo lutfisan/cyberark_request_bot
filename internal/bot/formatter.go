@@ -43,7 +43,7 @@ func formatRequestDetail(req *cyberark.IncomingRequestDetail) string {
 	expiryTime := time.Unix(req.ExpirationDate, 0).UTC().Format("2006-01-02 15:04 MST")
 	sb.WriteString(fmt.Sprintf("Expires At  : %s\n", expiryTime))
 	sb.WriteString(fmt.Sprintf("Reason      : %s\n", req.Reason))
-	sb.WriteString(fmt.Sprintf("Status      : %s\n", req.Status))
+	sb.WriteString(fmt.Sprintf("Status      : %v\n", req.Status))
 	sb.WriteString("─────────────────────────────────────────────\n")
 	sb.WriteString("Workflow Steps:\n")
 	for _, step := range req.ConfirmSteps {

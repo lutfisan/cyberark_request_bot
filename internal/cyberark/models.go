@@ -10,7 +10,7 @@ type IncomingRequest struct {
 	RequesterUserName string `json:"RequesterUserName"`
 	SafeName         string `json:"SafeName"`
 	AccountName      string `json:"AccountName"`
-	Status           string `json:"Status"`
+	Status           int    `json:"Status"`
 	CreationDate     int64  `json:"CreationDate"` // Assuming Unix timestamp or similar, might need to adjust based on exact API format
 }
 
@@ -33,7 +33,7 @@ type IncomingRequestDetail struct {
 	AccessType       string        `json:"AccessType"`
 	ExpirationDate   int64         `json:"ExpirationDate"`
 	Reason           string        `json:"Reason"`
-	Status           string        `json:"Status"`
+	Status           int           `json:"Status"`
 	ConfirmSteps     []ConfirmStep `json:"ConfirmSteps"`
 	CreationDate     int64         `json:"CreationDate"`
 }
