@@ -294,7 +294,7 @@ Poll Interval  : %d seconds
 Last Poll      : %s
 Last Result    : %d seen, %d new, %d stale-edited
 Cache Size     : %d requests
-`, stats.PollInterval, stats.LastPoll.Format("2006-01-02 15:04:05 UTC"), stats.LastSeen, stats.LastNew, stats.LastStaleEdited, stats.CacheSize)
+`, stats.PollInterval, stats.LastPoll.In(tzLocation).Format("2006-01-02 15:04:05 MST"), stats.LastSeen, stats.LastNew, stats.LastStaleEdited, stats.CacheSize)
 
 	return h.sendMessage(ctx, b, chatID, statusText)
 }
@@ -388,13 +388,13 @@ func (h *CommandHandler) executeConfirm(ctx context.Context, b *bot.Bot, chatID 
 	AuditLog("CONFIRM", reqID, false, userID, username, finalReason)
 	
 	if h.notifier != nil {
-		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("✅ CONFIRMED by @%s at %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
+		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("✅ CONFIRMED by @%s at %s", username, time.Now().In(tzLocation).Format("2006-01-02 15:04:05 MST")))
 	}
 
 	text := fmt.Sprintf(`✅ Request %s Confirmed
 Reason : %s
 By     : @%s
-At     : %s`, reqID, finalReason, username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
+At     : %s`, reqID, finalReason, username, time.Now().In(tzLocation).Format("2006-01-02 15:04:05 MST"))
 	return h.sendMessage(ctx, b, chatID, text)
 }
 
@@ -417,12 +417,12 @@ func (h *CommandHandler) executeReject(ctx context.Context, b *bot.Bot, chatID i
 	AuditLog("REJECT", reqID, false, userID, username, finalReason)
 	
 	if h.notifier != nil {
-		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("❌ REJECTED by @%s at %s — Reason: %s", username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"), finalReason))
+		h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("❌ REJECTED by @%s at %s — Reason: %s", username, time.Now().In(tzLocation).Format("2006-01-02 15:04:05 MST"), finalReason))
 	}
 
 	text := fmt.Sprintf(`❌ Request %s Rejected
 Reason : %s
 By     : @%s
-At     : %s`, reqID, finalReason, username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
+At     : %s`, reqID, finalReason, username, time.Now().In(tzLocation).Format("2006-01-02 15:04:05 MST"))
 	return h.sendMessage(ctx, b, chatID, text)
 }

@@ -42,6 +42,17 @@ func getAccountStr(details cyberark.AccountDetails, operation string) (string, s
 	return name, addr
 }
 
+var tzLocation *time.Location
+
+func init() {
+	loc, err := time.LoadLocation("Asia/Jakarta")
+	if err != nil {
+		tzLocation = time.Local
+	} else {
+		tzLocation = loc
+	}
+}
+
 func getTimeFrame(accessFrom, accessTo, creationDate, expirationDate int64) string {
 	var from, to int64
 	if accessFrom > 0 && accessTo > 0 {
@@ -56,10 +67,10 @@ func getTimeFrame(accessFrom, accessTo, creationDate, expirationDate int64) stri
 	toStr := "Unknown"
 	
 	if from > 0 {
-		fromStr = time.Unix(from, 0).UTC().Format("2006-01-02 15:04")
+		fromStr = time.Unix(from, 0).In(tzLocation).Format("2006-01-02 15:04")
 	}
 	if to > 0 {
-		toStr = time.Unix(to, 0).UTC().Format("2006-01-02 15:04")
+		toStr = time.Unix(to, 0).In(tzLocation).Format("2006-01-02 15:04")
 	}
 	
 	return fmt.Sprintf("%s to %s", fromStr, toStr)
@@ -69,7 +80,7 @@ func formatTime(t int64) string {
 	if t <= 0 {
 		return "Unknown"
 	}
-	return time.Unix(t, 0).UTC().Format("2006-01-02 15:04 MST")
+	return time.Unix(t, 0).In(tzLocation).Format("2006-01-02 15:04 MST")
 }
 
 func formatRequestList(requests []cyberark.IncomingRequest, page, totalPages int) string {

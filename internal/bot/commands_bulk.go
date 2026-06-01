@@ -262,7 +262,7 @@ func (h *CommandHandler) executeBulkAction(ctx context.Context, b *bot.Bot, chat
 			if isReject {
 				statusStr = "❌ REJECTED"
 			}
-			h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("%s by @%s at %s (Bulk)", statusStr, username, time.Now().UTC().Format("2006-01-02 15:04:05 UTC")))
+			h.notifier.UpdateNotificationMessage(ctx, reqID, fmt.Sprintf("%s by @%s at %s (Bulk)", statusStr, username, time.Now().In(tzLocation).Format("2006-01-02 15:04:05 MST")))
 		}
 	}
 

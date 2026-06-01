@@ -2,9 +2,15 @@ package bot
 
 import (
 	"testing"
+	"time"
 
 	"cybarbot/internal/cyberark"
 )
+
+func init() {
+	// Force UTC for tests to ensure consistent outputs
+	tzLocation = time.UTC
+}
 
 func TestGetRequester(t *testing.T) {
 	tests := []struct {
