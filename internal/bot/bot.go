@@ -33,6 +33,9 @@ func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitel
 				cmdHandler.DefaultHandler(ctx, b, update)
 			}
 		}),
+		bot.WithErrorsHandler(func(err error) {
+			slog.Error("telegram api error", "error", err)
+		}),
 		bot.WithMiddlewares(
 			PanicRecoveryMiddleware,
 			LoggingMiddleware,
@@ -141,7 +144,7 @@ func (b *Bot) Start(ctx context.Context) error {
 		slog.Info("started telegram bot in webhook mode")
 		go b.api.StartWebhook(ctx)
 	} else {
-		_, err := b.api.DeleteWebhook(ctx, &bot.DeleteWebhookParams{})
+		_, err := b.api.DeleteWebhook(ctx, &bot.DeleteWebhookParams{DropPendingUpdates: true})
 		if err != nil {
 			slog.Warn("failed to delete webhook", "error", err)
 		}
