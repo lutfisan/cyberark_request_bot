@@ -121,6 +121,22 @@ func (b *Bot) Start(ctx context.Context) error {
 		b.notifier.Start()
 	}
 
+	// Set Bot Commands for hamburger menu
+	_, err := b.api.SetMyCommands(ctx, &bot.SetMyCommandsParams{
+		Commands: []models.BotCommand{
+			{Command: "help", Description: "Show available commands"},
+			{Command: "requests", Description: "List all pending requests"},
+			{Command: "status", Description: "Show session info & bot health"},
+			{Command: "notify_status", Description: "Notification watcher health"},
+			{Command: "confirmall", Description: "Bulk confirm multiple requests"},
+			{Command: "rejectall", Description: "Bulk reject multiple requests"},
+			{Command: "cancel", Description: "Abort current operation"},
+		},
+	})
+	if err != nil {
+		slog.Warn("failed to set bot commands", "error", err)
+	}
+
 	if b.cfg.BotMode == "webhook" {
 		ws, err := StartWebhookServer(
 			b.api,

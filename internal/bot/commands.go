@@ -217,7 +217,7 @@ func (h *CommandHandler) sendMessage(ctx context.Context, b *bot.Bot, chatID int
 }
 
 func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int64) error {
-	helpText := `🤖 **CybArBot Command Reference**
+	helpText := `🤖 *CybArBot Command Reference*
 
 /start - Welcome message and command list
 /help - Full command reference
@@ -236,6 +236,9 @@ func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int6
 		Text:      helpText,
 		ParseMode: models.ParseModeMarkdown,
 	})
+	if err != nil {
+		slog.Error("failed to send help message", "error", err)
+	}
 	return err
 }
 
