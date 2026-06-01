@@ -471,13 +471,12 @@ type Whitelist struct {
     mu            sync.RWMutex
 }
 
-func (w *Whitelist) IsAllowed(update tgbotapi.Update) bool {
+func (w *Whitelist) IsAllowed(userID int64) bool {
+    // Check against memory map
     w.mu.RLock()
     defer w.mu.RUnlock()
-
-    senderID := extractSenderID(update)   // chat.ID for groups, from.ID for DMs
-    _, okUser  := w.allowedUsers[senderID]
-    _, okGroup := w.allowedGroups[senderID]
+    _, okUser  := w.allowedUsers[userID]
+    _, okGroup := w.allowedGroups[userID]
     return okUser || okGroup
 }
 ```
@@ -543,7 +542,7 @@ All values are loaded via `github.com/joho/godotenv` at startup. The `.env` file
 │  │  [webhook]   net/http Webhook Listener (:8443)                   │   │
 │  │              + X-Telegram-Bot-Api-Secret-Token verification      │   │
 │  └──────────────────────────┬───────────────────────────────────────┘   │
-│                             │ tgbotapi.Update                           │
+│                             │ models.Update                             │
 │                             ▼                                           │
 │  ┌────────────────────────────────────────────────────────────────────┐  │
 │  │   Update Dispatcher  ──▶  Whitelist Gate (ALLOWED IDs)            │  │
@@ -780,7 +779,7 @@ Content-Type:  application/json
 }
 ```
 
-### 9.4 Notable CyberArk API Behaviours
+#### 9.4 Notable CyberArk API Behaviours
 
 | Behaviour | Handling Strategy |
 |-----------|-------------------|
@@ -919,7 +918,7 @@ Each update handler goroutine is wrapped in a `recover()` block. A panicking han
 defer func() {
     if r := recover(); r != nil {
         slog.Error("handler panic", "recover", r, "stack", debug.Stack())
-        bot.Send(tgbotapi.NewMessage(chatID, "🔴 An internal error occurred. Please try again."))
+        b.SendMessage(ctx, &bot.SendMessageParams{ChatID: chatID, Text: "🔴 An internal error occurred. Please try again."})
     }
 }()
 ```
