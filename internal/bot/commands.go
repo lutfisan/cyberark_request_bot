@@ -105,13 +105,35 @@ func (h *CommandHandler) RequestsHandler(ctx context.Context, b *bot.Bot, update
 	h.handleRequests(ctx, b, chatID, 1)
 }
 
+func (h *CommandHandler) sendRequestSelection(ctx context.Context, b *bot.Bot, chatID int64, text, actionPrefix string) {
+	requests, err := h.auth.GetIncomingRequests()
+	if err != nil {
+		h.sendMessage(ctx, b, chatID, "🔴 Failed to fetch requests: "+err.Error())
+		return
+	}
+	if len(requests) == 0 {
+		h.sendMessage(ctx, b, chatID, "✅ No pending requests available.")
+		return
+	}
+
+	kb := buildRequestSelectionKeyboard(requests, actionPrefix)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: kb,
+	})
+	if err != nil {
+		h.sendMessage(ctx, b, chatID, "🔴 Failed to send selection menu.")
+	}
+}
+
 func (h *CommandHandler) DetailHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
 	h.fsm.Reset(chatID)
 	
 	args := getCommandArgs(update.Message.Text)
 	if args == "" {
-		h.sendMessage(ctx, b, chatID, "Usage: /detail <RequestID>")
+		h.sendRequestSelection(ctx, b, chatID, "🔍 Select a request to view details:", "notif_detail_")
 		return
 	}
 	h.handleDetail(ctx, b, chatID, args)
@@ -123,7 +145,7 @@ func (h *CommandHandler) ConfirmHandler(ctx context.Context, b *bot.Bot, update 
 	
 	args := getCommandArgs(update.Message.Text)
 	if args == "" {
-		h.sendMessage(ctx, b, chatID, "Usage: /confirm <RequestID>")
+		h.sendRequestSelection(ctx, b, chatID, "✅ Select a request to confirm:", "notif_confirm_")
 		return
 	}
 	h.handleConfirm(ctx, b, chatID, args)
@@ -135,7 +157,7 @@ func (h *CommandHandler) RejectHandler(ctx context.Context, b *bot.Bot, update *
 	
 	args := getCommandArgs(update.Message.Text)
 	if args == "" {
-		h.sendMessage(ctx, b, chatID, "Usage: /reject <RequestID>")
+		h.sendRequestSelection(ctx, b, chatID, "❌ Select a request to reject:", "notif_reject_")
 		return
 	}
 	h.handleReject(ctx, b, chatID, args)

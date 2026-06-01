@@ -106,3 +106,18 @@ func buildNotificationKeyboard(reqID string) models.InlineKeyboardMarkup {
 		},
 	}
 }
+
+func buildRequestSelectionKeyboard(requests []cyberark.IncomingRequest, actionPrefix string) models.InlineKeyboardMarkup {
+	var rows [][]models.InlineKeyboardButton
+
+	for _, req := range requests {
+		_, addr := getAccountStr(req.AccountDetails, req.Operation)
+		text := fmt.Sprintf("[%s] %s -> %s", req.RequestID, getRequester(req.RequestorUserName), addr)
+		
+		rows = append(rows, []models.InlineKeyboardButton{
+			{Text: text, CallbackData: actionPrefix + req.RequestID},
+		})
+	}
+
+	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
+}
