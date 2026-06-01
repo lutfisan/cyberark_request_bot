@@ -530,136 +530,105 @@ All values are loaded via `github.com/joho/godotenv` at startup. The `.env` file
 
 ### 8.2 Component Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                            CybArBot Process                              │
-│                                                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐   │
-│  │               Update Ingestion (BOT_MODE selects one)            │   │
-│  │                                                                  │   │
-│  │  [longpoll]  Telegram Long Poller (goroutine)                    │   │
-│  │              OR                                                  │   │
-│  │  [webhook]   net/http Webhook Listener (:8443)                   │   │
-│  │              + X-Telegram-Bot-Api-Secret-Token verification      │   │
-│  └──────────────────────────┬───────────────────────────────────────┘   │
-│                             │ models.Update                             │
-│                             ▼                                           │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │   Update Dispatcher  ──▶  Whitelist Gate (ALLOWED IDs)            │  │
-│  └──────────────────────────────────┬─────────────────────────────── ┘  │
-│                                     │  ✅ Allowed                       │
-│                                     ▼                                   │
-│  ┌────────────────────────────────────────────────────────────────────┐  │
-│  │                    Command Router + FSM                            │  │
-│  │  /requests /detail /confirm /confirmall /reject /rejectall        │  │
-│  │  /status   /notify_status  /help  /cancel                         │  │
-│  │  Per-chat FSM state: sync.Map[chatID → State]                     │  │
-│  └──────────────────────────────┬─────────────────────────────────── ┘  │
-│                                 │                                        │
-│  ┌──────────────────────────────▼─────────────────────────────────────┐  │
-│  │                      CyberArk API Client                           │  │
-│  │  ┌─────────────────────────────────┐  ┌──────────────────────┐    │  │
-│  │  │  AuthManager                    │  │  HTTP Pool           │    │  │
-│  │  │  token string                   │  │  (retryable,         │    │  │
-│  │  │  mu sync.RWMutex  ← OQ-1 choice │  │   timeout,           │    │  │
-│  │  │  refresh goroutine (TTL-2 min)  │  │   TLS config)        │    │  │
-│  │  └─────────────────────────────────┘  └──────────────────────┘    │  │
-│  │  ┌──────────────────────────────────────────────────────────────┐  │  │
-│  │  │  RequestService: List, Detail, Confirm, BulkConfirm,         │  │  │
-│  │  │                  Reject, BulkReject                          │  │  │
-│  │  └──────────────────────────┬───────────────────────────────────┘  │  │
-│  └─────────────────────────────│──────────────────────────────────────┘  │
-│                                │ poll results                            │
-│  ┌─────────────────────────────▼──────────────────────────────────────┐  │
-│  │                    Notification Watcher                            │  │
-│  │                                                                    │  │
-│  │  Ticker (POLL_INTERVAL_SECONDS ± 10% jitter)                      │  │
-│  │       │                                                            │  │
-│  │       ▼ each tick: GET /IncomingRequests?onlywaiting=true          │  │
-│  │  ┌────────────────────────────────────────────────────────────┐   │  │
-│  │  │  Seen-Request Cache                                        │   │  │
-│  │  │  sync.Map[requestID → CacheEntry{                          │   │  │
-│  │  │     SeenAt     time.Time                                   │   │  │
-│  │  │     LastStatus string                                      │   │  │
-│  │  │     Dispatches []SentMessage{ChatID, MessageID}            │   │  │
-│  │  │  }]                                                        │   │  │
-│  │  └──────────┬──────────────────────────┬─────────────────────┘   │  │
-│  │             │ Pass 1 — new IDs          │ Pass 2 — stale IDs      │  │
-│  │             ▼                           ▼                          │  │
-│  │  Send notifications              Edit existing messages            │  │
-│  │  (fan-out to NOTIFY_TARGETS)     (remove keyboard, show status)    │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────┘
-     │ HTTPS (long-poll OR webhook push)        │ HTTPS (REST API)
-     ▼                                          ▼
-Telegram Bot API                   CyberArk PVWA 14.6
-(api.telegram.org)                 (pvwa.corp.local)
+```mermaid
+flowchart TD
+    subgraph CybArBot["CybArBot Process"]
+        subgraph UpdateIngestion["Update Ingestion (BOT_MODE selects one)"]
+            LP["[longpoll] Telegram Long Poller (goroutine)"]
+            WH["[webhook] net/http Webhook Listener (:8443)<br/>+ X-Telegram-Bot-Api-Secret-Token verification"]
+        end
+        
+        UpdateIngestion -- "models.Update" --> Dispatcher["Update Dispatcher"]
+        Dispatcher -- "✅ Allowed" --> Router["Command Router + FSM<br/>/requests /detail /confirm ...<br/>Per-chat FSM state: sync.Map[chatID → State]"]
+        
+        Whitelist["Whitelist Gate (ALLOWED IDs)"]
+        Dispatcher -.-> Whitelist
+        
+        subgraph CyberArkClient["CyberArk API Client"]
+            Auth["AuthManager<br/>token string<br/>mu sync.RWMutex<br/>refresh goroutine (TTL-2 min)"]
+            HTTP["HTTP Pool<br/>(retryable, timeout, TLS config)"]
+            ReqService["RequestService: List, Detail, Confirm, BulkConfirm, Reject, BulkReject"]
+        end
+        
+        Router --> CyberArkClient
+        
+        subgraph WatcherGroup["Notification Watcher"]
+            Ticker["Ticker (POLL_INTERVAL_SECONDS ± 10% jitter)"]
+            Cache["Seen-Request Cache<br/>sync.Map[requestID → CacheEntry]"]
+            Pass1["Pass 1 — new IDs<br/>Send notifications"]
+            Pass2["Pass 2 — stale IDs<br/>Edit existing messages"]
+            
+            Ticker -- "each tick: GET /IncomingRequests?onlywaiting=true" --> Cache
+            Cache --> Pass1
+            Cache --> Pass2
+        end
+        
+        CyberArkClient -- "poll results" --> WatcherGroup
+    end
+    
+    TG["Telegram Bot API<br/>(api.telegram.org)"]
+    PVWA["CyberArk PVWA 14.6<br/>(pvwa.corp.local)"]
+    
+    TG -- "HTTPS (long-poll OR webhook push)" --> UpdateIngestion
+    CyberArkClient -- "HTTPS (REST API)" --> PVWA
 ```
 
 ### 8.3 Session Lifecycle State Machine
 
+```mermaid
+stateDiagram-v2
+    [*] --> Unauthenticated: Start
+    Unauthenticated --> Authenticated: POST /auth/CyberArk/Logon
+    
+    state Authenticated {
+        [*] --> HandleCommands
+        [*] --> RefreshGoroutine
+        [*] --> ReAuthOn401
+        
+        HandleCommands: Handle Commands (normal operation)
+        RefreshGoroutine: Refresh Goroutine (every TTL-2 minutes)
+        ReAuthOn401: Re-Auth on 401 (single retry)
+        
+        HandleCommands --> ReAuthOn401: 401 Received
+    }
+    
+    Authenticated --> Logoff: SIGTERM / SIGINT
+    Logoff --> [*]: Exit
+    ReAuthOn401 --> [*]: Alert Admin if re-auth fails
+    
+    note right of Logoff
+        POST /auth/Logoff
+    end note
 ```
-                        ┌─────────────────────┐
-               Start ──▶│      Unauthenticated │
-                        └──────────┬──────────┘
-                                   │ POST /auth/CyberArk/Logon
-                                   ▼
-                        ┌─────────────────────┐
-                        │    Authenticated     │◀──────────────────────────┐
-                        │  (token in memory)   │                           │
-                        └──────────┬──────────┘                           │
-                                   │                                       │
-                     ┌─────────────┴────────────┐                         │
-                     │                          │                         │
-              Handle Commands            Refresh Goroutine         Re-Auth on 401
-              (normal operation)       (every TTL-2 minutes)     (single retry)
-                     │                          │                         │
-                     └─────────────┬────────────┘                         │
-                                   │                                       │
-                              401 Received ──────────────────────────────▶│
-                                   │                                       │
-                              SIGTERM / SIGINT                             │
-                                   │                                       │
-                                   ▼                                       │
-                        ┌─────────────────────┐                           │
-                        │      Logoff          │                           │
-                        │ POST /auth/Logoff    │                           │
-                        └─────────────────────┘                           │
-                                   │                                       │
-                                  Exit                            Alert Admin if
-                                                                 re-auth fails
 
-Notification Watcher Startup Sequence (runs in parallel after Logon):
+**Notification Watcher Startup Sequence (runs in parallel after Logon):**
 
-  Authenticated
-       │
-       ▼
-  [NOTIFY_ON_RESTART=false?]
-       │ Yes                           │ No
-       ▼                               ▼
-  Pre-populate Seen Cache         Skip pre-population
-  (no notifications sent)         (all current requests
-       │                           will trigger alerts)
-       └──────────────┬─────────────────┘
-                      ▼
-             Start polling ticker
-             (every POLL_INTERVAL_SECONDS ± jitter)
-                      │
-               ┌──────┴──────────────────┐
-               │  Poll cycle              │
-               │  GET /IncomingRequests   │
-               │  ?onlywaiting=true       │
-               │                          │
-               │  Pass 1 — New IDs:       │
-               │  responseIDs ∖ cacheIDs  │
-               │  → dispatch notification │
-               │  → add to cache          │
-               │                          │
-               │  Pass 2 — Stale IDs:     │
-               │  cacheIDs ∖ responseIDs  │
-               │  → edit existing msgs    │
-               │  → evict from cache      │
-               └──────────────────────────┘
+```mermaid
+stateDiagram-v2
+    state "Authenticated" as Auth
+    state "Pre-populate Seen Cache<br/>(no notifications sent)" as Prepop
+    state "Skip pre-population<br/>(all current requests will trigger alerts)" as Skip
+    state "Start polling ticker<br/>(every POLL_INTERVAL_SECONDS ± jitter)" as Ticker
+    state "Poll cycle<br/>GET /IncomingRequests?onlywaiting=true" as PollCycle
+    
+    Auth --> Prepop: NOTIFY_ON_RESTART=false? (Yes)
+    Auth --> Skip: NOTIFY_ON_RESTART=false? (No)
+    Prepop --> Ticker
+    Skip --> Ticker
+    Ticker --> PollCycle
+    
+    state PollCycle {
+        [*] --> Pass1
+        [*] --> Pass2
+        Pass1: Pass 1 — New IDs (responseIDs ∖ cacheIDs)
+        Pass1 --> Dispatch: dispatch notification
+        Dispatch --> AddCache: add to cache
+        
+        Pass2: Pass 2 — Stale IDs (cacheIDs ∖ responseIDs)
+        Pass2 --> Edit: edit existing msgs
+        Edit --> Evict: evict from cache
+    }
+```
 
 Auth Manager — Resolved: sync.RWMutex (OQ-1):
 
