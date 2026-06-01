@@ -18,7 +18,7 @@ type SentMessage struct {
 
 type CacheEntry struct {
 	SeenAt     time.Time
-	LastStatus string
+	LastStatus int
 	Dispatches []SentMessage
 }
 
