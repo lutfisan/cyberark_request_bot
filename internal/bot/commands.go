@@ -217,16 +217,16 @@ func (h *CommandHandler) sendMessage(ctx context.Context, b *bot.Bot, chatID int
 }
 
 func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int64) error {
-	helpText := `🤖 *CybArBot Command Reference*
+	helpText := `🤖 <b>CybArBot Command Reference</b>
 
 /start - Welcome message and command list
 /help - Full command reference
 /status - Bot health, session status, active delivery mode
 /notify_status - Notification watcher health
 /requests - List all pending incoming requests (paginated)
-/detail <id> - Show full confirmation details for a request
-/confirm <id> - Confirm a single request (optional reason)
-/reject <id> - Reject a single request (mandatory reason)
+/detail &lt;id&gt; - Show full confirmation details for a request
+/confirm &lt;id&gt; - Confirm a single request (optional reason)
+/reject &lt;id&gt; - Reject a single request (mandatory reason)
 /confirmall - Bulk confirm multiple requests
 /rejectall - Bulk reject multiple requests
 /cancel - Abort any active multi-step operation
@@ -234,7 +234,7 @@ func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int6
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    chatID,
 		Text:      helpText,
-		ParseMode: models.ParseModeMarkdown,
+		ParseMode: models.ParseModeHTML,
 	})
 	if err != nil {
 		slog.Error("failed to send help message", "error", err)
