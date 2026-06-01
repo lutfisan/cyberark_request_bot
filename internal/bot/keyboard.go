@@ -58,7 +58,8 @@ func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[s
 			check = "✅"
 		}
 		
-		text := fmt.Sprintf("%s %s (%s)", check, req.SafeName, req.AccountName)
+		_, addr := getAccountStr(req.AccountDetails, req.Operation)
+		text := fmt.Sprintf("%s [%s] %s -> %s", check, req.RequestID, req.RequestorUserName, addr)
 		action := "toggle_" + req.RequestID
 		
 		rows = append(rows, []models.InlineKeyboardButton{

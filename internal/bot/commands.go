@@ -333,12 +333,14 @@ func (h *CommandHandler) handleConfirm(ctx context.Context, b *bot.Bot, chatID i
 		return err
 	}
 
+	requester := getRequester(detail.RequestorUserName)
+	_, addr := getAccountStr(detail.AccountDetails, detail.Operation)
 	text := fmt.Sprintf(`⚠️ Confirm Request %s?
 Requester : %s
 Safe      : %s
 Account   : %s
 ─────────────────────────
-Add a reason?`, reqID, detail.RequesterUserName, detail.SafeName, detail.AccountName)
+Add a reason?`, reqID, requester, detail.SafeName, addr)
 
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
