@@ -6,12 +6,19 @@ package cyberark
 type LogonResponse string // API returns raw string
 
 type IncomingRequest struct {
-	RequestID        string `json:"RequestID"`
+	RequestID         string `json:"RequestID"`
+	RequestorUserName string `json:"RequestorUserName"`
 	RequesterUserName string `json:"RequesterUserName"`
-	SafeName         string `json:"SafeName"`
-	AccountName      string `json:"AccountName"`
-	Status           int    `json:"Status"`
-	CreationDate     int64  `json:"CreationDate"` // Assuming Unix timestamp or similar, might need to adjust based on exact API format
+	SafeName          string `json:"SafeName"`
+	AccountName       string `json:"AccountName"`
+	AccountAddress    string `json:"AccountAddress"`
+	Operation         string `json:"Operation"`
+	Status            int    `json:"Status"`
+	CreationDate      int64  `json:"CreationDate"`
+	ExpirationDate    int64  `json:"ExpirationDate"`
+	AccessFrom        int64  `json:"AccessFrom"`
+	AccessTo          int64  `json:"AccessTo"`
+	UserReason        string `json:"UserReason"`
 }
 
 type IncomingRequestsResponse struct {
@@ -26,16 +33,22 @@ type ConfirmStep struct {
 }
 
 type IncomingRequestDetail struct {
-	RequestID        string        `json:"RequestID"`
+	RequestID         string        `json:"RequestID"`
+	RequestorUserName string        `json:"RequestorUserName"`
 	RequesterUserName string        `json:"RequesterUserName"`
-	SafeName         string        `json:"SafeName"`
-	AccountName      string        `json:"AccountName"`
-	AccessType       string        `json:"AccessType"`
-	ExpirationDate   int64         `json:"ExpirationDate"`
-	Reason           string        `json:"Reason"`
-	Status           int           `json:"Status"`
-	ConfirmSteps     []ConfirmStep `json:"ConfirmSteps"`
-	CreationDate     int64         `json:"CreationDate"`
+	SafeName          string        `json:"SafeName"`
+	AccountName       string        `json:"AccountName"`
+	AccountAddress    string        `json:"AccountAddress"`
+	AccessType        string        `json:"AccessType"`
+	Operation         string        `json:"Operation"`
+	CreationDate      int64         `json:"CreationDate"`
+	ExpirationDate    int64         `json:"ExpirationDate"`
+	AccessFrom        int64         `json:"AccessFrom"`
+	AccessTo          int64         `json:"AccessTo"`
+	Reason            string        `json:"Reason"`
+	UserReason        string        `json:"UserReason"`
+	Status            int           `json:"Status"`
+	ConfirmSteps      []ConfirmStep `json:"ConfirmSteps"`
 }
 
 type ActionRequest struct {
