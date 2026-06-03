@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -208,12 +209,23 @@ func (h *CommandHandler) handleBulkToggle(ctx context.Context, b *bot.Bot, chatI
 
 func (h *CommandHandler) handleBulkActionInit(ctx context.Context, b *bot.Bot, chatID int64, isReject bool) error {
 	fsmCtx := h.fsm.GetContext(chatID)
+	slog.Info("handleBulkActionInit",
+		"chatID", chatID,
+		"isReject", isReject,
+		"state", fsmCtx.State,
+		"requestIDs", fsmCtx.RequestIDs,
+		"requestIDs_count", len(fsmCtx.RequestIDs),
+	)
 	if len(fsmCtx.RequestIDs) == 0 {
 		return h.sendMessage(ctx, b, chatID, "⚠️ No requests selected.")
 	}
 
 	if isReject {
-		h.fsm.SetState(chatID, StateWaitingRejectReason)
+		newCtx := h.fsm.SetState(chatID, StateWaitingRejectReason)
+		slog.Info("handleBulkActionInit: state set to WaitingRejectReason",
+			"newState", newCtx.State,
+			"requestIDs_after", newCtx.RequestIDs,
+		)
 		return h.sendMessage(ctx, b, chatID, "✏️ Please provide a rejection reason for the selected requests:")
 	} else {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
@@ -227,6 +239,14 @@ func (h *CommandHandler) handleBulkActionInit(ctx context.Context, b *bot.Bot, c
 
 func (h *CommandHandler) executeBulkAction(ctx context.Context, b *bot.Bot, chatID int64, username string, userID int64, reason string, isReject bool) error {
 	fsmCtx := h.fsm.GetContext(chatID)
+	slog.Info("executeBulkAction",
+		"chatID", chatID,
+		"isReject", isReject,
+		"reason", reason,
+		"state", fsmCtx.State,
+		"requestIDs", fsmCtx.RequestIDs,
+		"requestIDs_count", len(fsmCtx.RequestIDs),
+	)
 	if len(fsmCtx.RequestIDs) == 0 {
 		return h.sendMessage(ctx, b, chatID, "⚠️ No requests selected for bulk action.")
 	}
