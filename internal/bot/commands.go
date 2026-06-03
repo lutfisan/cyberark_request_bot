@@ -49,6 +49,13 @@ func (h *CommandHandler) DefaultHandler(ctx context.Context, b *bot.Bot, update 
 	}
 
 	fsmCtx := h.fsm.GetContext(chatID)
+	slog.Info("DefaultHandler: FSM state check",
+		"chatID", chatID,
+		"state", fsmCtx.State,
+		"requestID", fsmCtx.RequestID,
+		"requestIDs_count", len(fsmCtx.RequestIDs),
+		"text", text,
+	)
 	if fsmCtx.State == StateIdle {
 		return // Ignore random text messages
 	}
@@ -72,6 +79,9 @@ func (h *CommandHandler) DefaultHandler(ctx context.Context, b *bot.Bot, update 
 		}
 	case StateBulkConfirmSelect, StateBulkRejectSelect:
 		// Ignoring text while in bulk select mode
+		slog.Info("DefaultHandler: ignoring text in bulk select mode", "state", fsmCtx.State)
+	default:
+		slog.Info("DefaultHandler: unhandled FSM state", "state", fsmCtx.State)
 	}
 
 	if err != nil {
