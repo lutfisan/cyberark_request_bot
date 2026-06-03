@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"cybarbot/internal/config"
 	"cybarbot/internal/cyberark"
@@ -28,6 +29,7 @@ func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitel
 	
 	// 1. Setup Options
 	opts := []bot.Option{
+		bot.WithNotAsyncHandlers(),
 		bot.WithDefaultHandler(func(ctx context.Context, b *bot.Bot, update *models.Update) {
 			if cmdHandler != nil {
 				cmdHandler.DefaultHandler(ctx, b, update)
@@ -86,15 +88,21 @@ func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitel
 		cmdHandler.CancelHandler,
 	)
 	b.RegisterHandlerMatchFunc(
-		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 7 && update.Message.Text[:7] == "/detail" },
+		func(update *models.Update) bool {
+			return update.Message != nil && (update.Message.Text == "/detail" || strings.HasPrefix(update.Message.Text, "/detail "))
+		},
 		cmdHandler.DetailHandler,
 	)
 	b.RegisterHandlerMatchFunc(
-		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 8 && update.Message.Text[:8] == "/confirm" },
+		func(update *models.Update) bool {
+			return update.Message != nil && (update.Message.Text == "/confirm" || strings.HasPrefix(update.Message.Text, "/confirm "))
+		},
 		cmdHandler.ConfirmHandler,
 	)
 	b.RegisterHandlerMatchFunc(
-		func(update *models.Update) bool { return update.Message != nil && len(update.Message.Text) > 7 && update.Message.Text[:7] == "/reject" },
+		func(update *models.Update) bool {
+			return update.Message != nil && (update.Message.Text == "/reject" || strings.HasPrefix(update.Message.Text, "/reject "))
+		},
 		cmdHandler.RejectHandler,
 	)
 	b.RegisterHandlerMatchFunc(
