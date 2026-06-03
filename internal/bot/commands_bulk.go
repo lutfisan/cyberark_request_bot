@@ -128,7 +128,6 @@ func (h *CommandHandler) handleBulkCallback(ctx context.Context, b *bot.Bot, upd
 				Text:   "Please type your bulk confirmation reason:",
 				ReplyMarkup: &models.ForceReply{
 					ForceReply: true,
-					Selective:  true,
 				},
 			})
 			return err
@@ -239,7 +238,6 @@ func (h *CommandHandler) handleBulkActionInit(ctx context.Context, b *bot.Bot, c
 			Text:   "✏️ Please provide a rejection reason for the selected requests:",
 			ReplyMarkup: &models.ForceReply{
 				ForceReply: true,
-				Selective:  true,
 			},
 		})
 		return err

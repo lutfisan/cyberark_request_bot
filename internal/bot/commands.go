@@ -212,7 +212,6 @@ func (h *CommandHandler) CallbackHandler(ctx context.Context, b *bot.Bot, update
 			Text:   "Please type your reason:",
 			ReplyMarkup: &models.ForceReply{
 				ForceReply: true,
-				Selective:  true,
 			},
 		})
 	} else if strings.HasPrefix(data, "notif_confirm_") {
@@ -426,7 +425,6 @@ func (h *CommandHandler) handleReject(ctx context.Context, b *bot.Bot, chatID in
 		Text:   text,
 		ReplyMarkup: &models.ForceReply{
 			ForceReply: true,
-			Selective:  true,
 		},
 	})
 	return err
