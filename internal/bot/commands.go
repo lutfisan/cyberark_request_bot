@@ -206,7 +206,15 @@ func (h *CommandHandler) CallbackHandler(ctx context.Context, b *bot.Bot, update
 		reqID := strings.TrimPrefix(data, "confirm_reason_")
 		fsmCtx := h.fsm.SetState(chatID, StateWaitingConfirmReason)
 		fsmCtx.RequestID = reqID
-		h.sendMessage(ctx, b, chatID, "Please type your reason:")
+		
+		_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "Please type your reason:",
+			ReplyMarkup: &models.ForceReply{
+				ForceReply: true,
+				Selective:  true,
+			},
+		})
 	} else if strings.HasPrefix(data, "notif_confirm_") {
 		reqID := strings.TrimPrefix(data, "notif_confirm_")
 		err = h.handleConfirm(ctx, b, chatID, reqID)
@@ -413,7 +421,15 @@ func (h *CommandHandler) handleReject(ctx context.Context, b *bot.Bot, chatID in
 	fsmCtx.RequestID = reqID
 
 	text := fmt.Sprintf("✏️ Please provide a rejection reason for %s\n(This field is mandatory):", reqID)
-	return h.sendMessage(ctx, b, chatID, text)
+	_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
+		ReplyMarkup: &models.ForceReply{
+			ForceReply: true,
+			Selective:  true,
+		},
+	})
+	return err
 }
 
 func (h *CommandHandler) executeReject(ctx context.Context, b *bot.Bot, chatID int64, reqID, username string, userID int64, reason string) error {

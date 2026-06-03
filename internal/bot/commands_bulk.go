@@ -123,7 +123,15 @@ func (h *CommandHandler) handleBulkCallback(ctx context.Context, b *bot.Bot, upd
 		fsmCtx := h.fsm.GetContext(chatID)
 		if fsmCtx.State == StateBulkConfirmSelect {
 			h.fsm.SetState(chatID, StateWaitingConfirmReason)
-			h.sendMessage(ctx, b, chatID, "Please type your bulk confirmation reason:")
+			_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   "Please type your bulk confirmation reason:",
+				ReplyMarkup: &models.ForceReply{
+					ForceReply: true,
+					Selective:  true,
+				},
+			})
+			return err
 		}
 		return nil
 	}
@@ -226,7 +234,15 @@ func (h *CommandHandler) handleBulkActionInit(ctx context.Context, b *bot.Bot, c
 			"newState", newCtx.State,
 			"requestIDs_after", newCtx.RequestIDs,
 		)
-		return h.sendMessage(ctx, b, chatID, "✏️ Please provide a rejection reason for the selected requests:")
+		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "✏️ Please provide a rejection reason for the selected requests:",
+			ReplyMarkup: &models.ForceReply{
+				ForceReply: true,
+				Selective:  true,
+			},
+		})
+		return err
 	} else {
 		_, err := b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID:      chatID,
