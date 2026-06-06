@@ -18,11 +18,12 @@ CybArBot is a production-grade, Go-based Telegram chatbot that allows authorised
 |--------------------|-----------------------------------------------------|
 | `/start` `/help`   | Welcome message and command list                    |
 | `/requests`        | List all pending incoming requests (paginated)      |
+| `/search <query>`  | Search requests by Requester, Address, or Reason    |
 | `/detail <id>`     | Show full confirmation details for a request        |
 | `/confirm <id>`    | Confirm a single request (prompts for optional reason)|
 | `/reject <id>`     | Reject a single request (prompts for mandatory reason)|
-| `/confirmall`      | Multi-select bulk confirmation (Select All support) |
-| `/rejectall`       | Multi-select bulk rejection (Select All support)    |
+| `/confirmall`      | Multi-select bulk confirmation (paginated, Select All)|
+| `/rejectall`       | Multi-select bulk rejection (paginated, Select All)   |
 | `/status`          | Bot health, session status, active delivery mode    |
 | `/notify_status`   | Notification watcher health, last poll, cache size  |
 | `/cancel`          | Abort any active multi-step operation               |
