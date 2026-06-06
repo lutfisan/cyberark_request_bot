@@ -126,7 +126,7 @@ func (h *CommandHandler) sendRequestSelection(ctx context.Context, b *bot.Bot, c
 		return
 	}
 
-	kb := buildRequestSelectionKeyboard(requests, actionPrefix)
+	kb := buildRequestSelectionKeyboard(requests, actionPrefix, 1)
 	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
@@ -223,6 +223,25 @@ func (h *CommandHandler) CallbackHandler(ctx context.Context, b *bot.Bot, update
 	} else if strings.HasPrefix(data, "notif_detail_") {
 		reqID := strings.TrimPrefix(data, "notif_detail_")
 		err = h.handleDetail(ctx, b, chatID, reqID)
+	} else if strings.HasPrefix(data, "sel_page_") {
+		// format: sel_page_<page>_<actionPrefix>
+		parts := strings.SplitN(strings.TrimPrefix(data, "sel_page_"), "_", 2)
+		if len(parts) == 2 {
+			var page int
+			fmt.Sscanf(parts[0], "%d", &page)
+			actionPrefix := parts[1]
+			
+			requests, errReq := h.auth.GetIncomingRequests()
+			if errReq == nil {
+				_, err = b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
+					ChatID:      chatID,
+					MessageID:   cb.Message.Message.ID,
+					ReplyMarkup: buildRequestSelectionKeyboard(requests, actionPrefix, page),
+				})
+			} else {
+				err = errReq
+			}
+		}
 	} else if strings.HasPrefix(data, "toggle_") || strings.HasPrefix(data, "bulk_page_") || data == "bulk_action_confirm" || data == "bulk_action_reject" || data == "cancel_bulk" || data == "bulk_confirm_skip" || data == "bulk_confirm_reason" {
 		// Bulk handlers will be moved to commands_bulk.go but called from here
 		err = h.handleBulkCallback(ctx, b, update)

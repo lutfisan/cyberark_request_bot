@@ -147,16 +147,55 @@ func buildNotificationKeyboard(reqID string) models.InlineKeyboardMarkup {
 	}
 }
 
-func buildRequestSelectionKeyboard(requests []cyberark.IncomingRequest, actionPrefix string) models.InlineKeyboardMarkup {
+const selectPageSize = 20
+
+func buildRequestSelectionKeyboard(requests []cyberark.IncomingRequest, actionPrefix string, page int) models.InlineKeyboardMarkup {
 	var rows [][]models.InlineKeyboardButton
 
-	for _, req := range requests {
+	total := len(requests)
+	totalPages := (total + selectPageSize - 1) / selectPageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	startIdx := (page - 1) * selectPageSize
+	endIdx := startIdx + selectPageSize
+	if endIdx > total {
+		endIdx = total
+	}
+
+	pageRequests := requests[startIdx:endIdx]
+
+	for _, req := range pageRequests {
 		_, addr := getAccountStr(req.AccountDetails, req.Operation)
 		text := fmt.Sprintf("[%s] %s -> %s", req.RequestID, getRequester(req.RequestorUserName), addr)
 		
 		rows = append(rows, []models.InlineKeyboardButton{
 			{Text: text, CallbackData: actionPrefix + req.RequestID},
 		})
+	}
+
+	// Pagination nav row (only if multiple pages)
+	if totalPages > 1 {
+		var navRow []models.InlineKeyboardButton
+		if page > 1 {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: "◀ Prev", CallbackData: fmt.Sprintf("sel_page_%d_%s", page-1, actionPrefix)})
+		} else {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
+		}
+		navRow = append(navRow, models.InlineKeyboardButton{Text: fmt.Sprintf("Page %d/%d", page, totalPages), CallbackData: "noop"})
+		if page < totalPages {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: "Next ▶", CallbackData: fmt.Sprintf("sel_page_%d_%s", page+1, actionPrefix)})
+		} else {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
+		}
+		rows = append(rows, navRow)
 	}
 
 	return models.InlineKeyboardMarkup{InlineKeyboard: rows}
