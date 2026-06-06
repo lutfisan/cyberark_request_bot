@@ -77,6 +77,8 @@ func (h *CommandHandler) DefaultHandler(ctx context.Context, b *bot.Bot, update 
 		} else {
 			err = h.executeReject(ctx, b, chatID, fsmCtx.RequestID, username, userID, text)
 		}
+	case StateWaitingSearchQuery:
+		err = h.handleSearch(ctx, b, chatID, text)
 	case StateBulkConfirmSelect, StateBulkRejectSelect:
 		// Ignoring text while in bulk select mode
 		slog.Info("DefaultHandler: ignoring text in bulk select mode", "state", fsmCtx.State)
@@ -172,6 +174,71 @@ func (h *CommandHandler) RejectHandler(ctx context.Context, b *bot.Bot, update *
 	}
 	h.handleReject(ctx, b, chatID, args)
 }
+
+func (h *CommandHandler) SearchHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
+	chatID := update.Message.Chat.ID
+	h.fsm.Reset(chatID)
+	
+	args := getCommandArgs(update.Message.Text)
+	if args == "" {
+		h.fsm.SetState(chatID, StateWaitingSearchQuery)
+		_, _ = b.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   "🔍 Please enter your search query (matches Requester, Address, or Reason):",
+			ReplyMarkup: &models.ForceReply{
+				ForceReply: true,
+			},
+		})
+		return
+	}
+	h.handleSearch(ctx, b, chatID, args)
+}
+
+func (h *CommandHandler) handleSearch(ctx context.Context, b *bot.Bot, chatID int64, query string) error {
+	query = strings.ToLower(strings.TrimSpace(query))
+	
+	requests, err := h.auth.GetIncomingRequests()
+	if err != nil {
+		h.sendMessage(ctx, b, chatID, "🔴 Failed to fetch requests: "+err.Error())
+		return err
+	}
+	if len(requests) == 0 {
+		h.sendMessage(ctx, b, chatID, "✅ No pending requests available.")
+		return nil
+	}
+
+	var results []cyberark.IncomingRequest
+	for _, req := range requests {
+		_, addr := getAccountStr(req.AccountDetails, req.Operation)
+		requester := getRequester(req.RequestorUserName)
+		
+		match := strings.Contains(strings.ToLower(requester), query) ||
+			strings.Contains(strings.ToLower(addr), query) ||
+			strings.Contains(strings.ToLower(req.UserReason), query)
+			
+		if match {
+			results = append(results, req)
+		}
+	}
+
+	if len(results) == 0 {
+		h.sendMessage(ctx, b, chatID, fmt.Sprintf("🔍 No requests matched '%s'.", query))
+		return nil
+	}
+
+	text := fmt.Sprintf("🔍 Found %d matching requests. Select to view details:", len(results))
+	kb := buildRequestSelectionKeyboard(results, "notif_detail_", 1)
+	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      chatID,
+		Text:        text,
+		ReplyMarkup: kb,
+	})
+	if err != nil {
+		h.sendMessage(ctx, b, chatID, "🔴 Failed to send search results.")
+	}
+	return err
+}
+
 
 func (h *CommandHandler) CancelHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 	chatID := update.Message.Chat.ID
@@ -287,6 +354,7 @@ func (h *CommandHandler) handleHelp(ctx context.Context, b *bot.Bot, chatID int6
 /reject &lt;id&gt; - Reject a single request (mandatory reason)
 /confirmall - Bulk confirm multiple requests
 /rejectall - Bulk reject multiple requests
+/search &lt;query&gt; - Search requests by Requester, Address, or Reason
 /cancel - Abort any active multi-step operation
 `
 	_, err := b.SendMessage(ctx, &bot.SendMessageParams{

@@ -84,6 +84,10 @@ func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitel
 		cmdHandler.RejectAllHandler,
 	)
 	b.RegisterHandlerMatchFunc(
+		func(update *models.Update) bool { return update.Message != nil && (update.Message.Text == "/search" || strings.HasPrefix(update.Message.Text, "/search ")) },
+		cmdHandler.SearchHandler,
+	)
+	b.RegisterHandlerMatchFunc(
 		func(update *models.Update) bool { return update.Message != nil && update.Message.Text == "/cancel" },
 		cmdHandler.CancelHandler,
 	)

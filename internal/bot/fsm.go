@@ -14,6 +14,7 @@ const (
 	StateWaitingBulkConfirmReason
 	StateBulkRejectSelect
 	StateWaitingBulkRejectReason
+	StateWaitingSearchQuery
 )
 
 type FSMContext struct {
