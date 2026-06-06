@@ -49,10 +49,32 @@ func buildBulkConfirmReasonKeyboard() models.InlineKeyboardMarkup {
 	}
 }
 
-func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[string]bool, isReject bool, allSelected bool) models.InlineKeyboardMarkup {
+const bulkPageSize = 20
+
+func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[string]bool, isReject bool, allSelected bool, page int) models.InlineKeyboardMarkup {
 	var rows [][]models.InlineKeyboardButton
 
-	for _, req := range requests {
+	total := len(requests)
+	totalPages := (total + bulkPageSize - 1) / bulkPageSize
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	startIdx := (page - 1) * bulkPageSize
+	endIdx := startIdx + bulkPageSize
+	if endIdx > total {
+		endIdx = total
+	}
+
+	pageRequests := requests[startIdx:endIdx]
+
+	for _, req := range pageRequests {
 		check := "⬜"
 		if selected[req.RequestID] {
 			check = "✅"
@@ -65,6 +87,24 @@ func buildBulkSelectKeyboard(requests []cyberark.IncomingRequest, selected map[s
 		rows = append(rows, []models.InlineKeyboardButton{
 			{Text: text, CallbackData: action},
 		})
+	}
+
+	// Pagination nav row (only if multiple pages)
+	if totalPages > 1 {
+		var navRow []models.InlineKeyboardButton
+		if page > 1 {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: "◀ Prev", CallbackData: fmt.Sprintf("bulk_page_%d", page-1)})
+		} else {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
+		}
+		selectedCount := len(selected)
+		navRow = append(navRow, models.InlineKeyboardButton{Text: fmt.Sprintf("Page %d/%d (%d sel)", page, totalPages, selectedCount), CallbackData: "noop"})
+		if page < totalPages {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: "Next ▶", CallbackData: fmt.Sprintf("bulk_page_%d", page+1)})
+		} else {
+			navRow = append(navRow, models.InlineKeyboardButton{Text: " ", CallbackData: "noop"})
+		}
+		rows = append(rows, navRow)
 	}
 
 	var allCheck string

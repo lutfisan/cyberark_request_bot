@@ -21,6 +21,7 @@ type FSMContext struct {
 	RequestID  string
 	RequestIDs []string // For bulk operations
 	MessageID  int      // Message ID of the prompt/keyboard, to edit it later
+	BulkPage   int      // Current page for paginated bulk select
 }
 
 type FSMManager struct {

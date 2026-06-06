@@ -223,7 +223,7 @@ func (h *CommandHandler) CallbackHandler(ctx context.Context, b *bot.Bot, update
 	} else if strings.HasPrefix(data, "notif_detail_") {
 		reqID := strings.TrimPrefix(data, "notif_detail_")
 		err = h.handleDetail(ctx, b, chatID, reqID)
-	} else if strings.HasPrefix(data, "toggle_") || data == "bulk_action_confirm" || data == "bulk_action_reject" || data == "cancel_bulk" || data == "bulk_confirm_skip" || data == "bulk_confirm_reason" {
+	} else if strings.HasPrefix(data, "toggle_") || strings.HasPrefix(data, "bulk_page_") || data == "bulk_action_confirm" || data == "bulk_action_reject" || data == "cancel_bulk" || data == "bulk_confirm_skip" || data == "bulk_confirm_reason" {
 		// Bulk handlers will be moved to commands_bulk.go but called from here
 		err = h.handleBulkCallback(ctx, b, update)
 	} else if data == "noop" {

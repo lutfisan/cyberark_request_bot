@@ -39,14 +39,15 @@ func (h *CommandHandler) handleConfirmAll(ctx context.Context, b *bot.Bot, chatI
 
 	fsmCtx := h.fsm.SetState(chatID, StateBulkConfirmSelect)
 	fsmCtx.RequestIDs = make([]string, 0)
+	fsmCtx.BulkPage = 1
 	
 	selected := make(map[string]bool)
 
-	text := "Select requests to confirm:\n──────────────────────────────────────────"
+	text := fmt.Sprintf("Select requests to confirm (%d total):\n──────────────────────────────────────────", len(requests))
 	msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
-		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, false, false),
+		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, false, false, 1),
 	})
 	
 	if err == nil {
@@ -67,14 +68,15 @@ func (h *CommandHandler) handleRejectAll(ctx context.Context, b *bot.Bot, chatID
 
 	fsmCtx := h.fsm.SetState(chatID, StateBulkRejectSelect)
 	fsmCtx.RequestIDs = make([]string, 0)
+	fsmCtx.BulkPage = 1
 	
 	selected := make(map[string]bool)
 
-	text := "Select requests to reject:\n──────────────────────────────────────────"
+	text := fmt.Sprintf("Select requests to reject (%d total):\n──────────────────────────────────────────", len(requests))
 	msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        text,
-		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, true, false),
+		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, true, false, 1),
 	})
 	
 	if err == nil {
@@ -98,7 +100,11 @@ func (h *CommandHandler) handleBulkCallback(ctx context.Context, b *bot.Bot, upd
 
 	data := cb.Data
 
-	if strings.HasPrefix(data, "toggle_") {
+	if strings.HasPrefix(data, "bulk_page_") {
+		var page int
+		fmt.Sscanf(data, "bulk_page_%d", &page)
+		return h.handleBulkPageChange(ctx, b, chatID, messageID, page)
+	} else if strings.HasPrefix(data, "toggle_") {
 		reqID := strings.TrimPrefix(data, "toggle_")
 		if reqID == "all" {
 			return h.handleBulkToggle(ctx, b, chatID, messageID, "", true)
@@ -208,7 +214,44 @@ func (h *CommandHandler) handleBulkToggle(ctx context.Context, b *bot.Bot, chatI
 	_, err = b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
 		ChatID:      chatID,
 		MessageID:   messageID,
-		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, isReject, allSelected),
+		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, isReject, allSelected, fsmCtx.BulkPage),
+	})
+
+	return err
+}
+
+func (h *CommandHandler) handleBulkPageChange(ctx context.Context, b *bot.Bot, chatID int64, messageID int, page int) error {
+	fsmCtx := h.fsm.GetContext(chatID)
+	if fsmCtx.State != StateBulkConfirmSelect && fsmCtx.State != StateBulkRejectSelect {
+		return nil
+	}
+
+	fsmCtx.BulkPage = page
+
+	requests, err := h.auth.GetIncomingRequests()
+	if err != nil {
+		return err
+	}
+
+	selected := make(map[string]bool)
+	for _, id := range fsmCtx.RequestIDs {
+		selected[id] = true
+	}
+
+	allSelected := true
+	for _, req := range requests {
+		if !selected[req.RequestID] {
+			allSelected = false
+			break
+		}
+	}
+
+	isReject := fsmCtx.State == StateBulkRejectSelect
+
+	_, err = b.EditMessageReplyMarkup(ctx, &bot.EditMessageReplyMarkupParams{
+		ChatID:      chatID,
+		MessageID:   messageID,
+		ReplyMarkup: buildBulkSelectKeyboard(requests, selected, isReject, allSelected, page),
 	})
 
 	return err
