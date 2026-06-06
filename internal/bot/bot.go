@@ -140,6 +140,7 @@ func (b *Bot) Start(ctx context.Context) error {
 			{Command: "requests", Description: "List all pending requests"},
 			{Command: "status", Description: "Show session info & bot health"},
 			{Command: "notify_status", Description: "Notification watcher health"},
+			{Command: "search", Description: "Search requests by Requester/Address"},
 			{Command: "confirmall", Description: "Bulk confirm multiple requests"},
 			{Command: "rejectall", Description: "Bulk reject multiple requests"},
 			{Command: "cancel", Description: "Abort current operation"},
