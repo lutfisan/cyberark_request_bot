@@ -138,11 +138,14 @@ func (b *Bot) Start(ctx context.Context) error {
 		Commands: []models.BotCommand{
 			{Command: "help", Description: "Show available commands"},
 			{Command: "requests", Description: "List all pending requests"},
-			{Command: "status", Description: "Show session info & bot health"},
-			{Command: "notify_status", Description: "Notification watcher health"},
-			{Command: "search", Description: "Search requests by Requester/Address"},
+			{Command: "detail", Description: "View single request details"},
+			{Command: "confirm", Description: "Confirm a single request"},
+			{Command: "reject", Description: "Reject a single request"},
 			{Command: "confirmall", Description: "Bulk confirm multiple requests"},
 			{Command: "rejectall", Description: "Bulk reject multiple requests"},
+			{Command: "search", Description: "Search requests by Requester/Address"},
+			{Command: "status", Description: "Show session info & bot health"},
+			{Command: "notify_status", Description: "Notification watcher health"},
 			{Command: "cancel", Description: "Abort current operation"},
 		},
 	})
