@@ -444,18 +444,49 @@ func (h *CommandHandler) handleRequests(ctx context.Context, b *bot.Bot, chatID 
 }
 
 func (h *CommandHandler) handleDetail(ctx context.Context, b *bot.Bot, chatID int64, reqID string) error {
-	detail, err := h.auth.GetIncomingRequestDetail(reqID)
+	msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "⏳ Fetching details from PVWA (this may take up to 60 seconds)...",
+	})
 	if err != nil {
 		return err
 	}
 
+	detail, err := h.auth.GetIncomingRequestDetail(reqID)
+	if err != nil {
+		_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatID,
+			MessageID: msg.ID,
+			Text:      "🔴 Failed to fetch details: " + err.Error(),
+		})
+		return err
+	}
+
 	text := formatRequestDetail(detail)
-	return h.sendMessage(ctx, b, chatID, text)
+	_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID:    chatID,
+		MessageID: msg.ID,
+		Text:      text,
+	})
+	return err
 }
 
 func (h *CommandHandler) handleConfirm(ctx context.Context, b *bot.Bot, chatID int64, reqID string) error {
+	msg, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   "⏳ Fetching request data from PVWA (this may take up to 60 seconds)...",
+	})
+	if err != nil {
+		return err
+	}
+
 	detail, err := h.auth.GetIncomingRequestDetail(reqID)
 	if err != nil {
+		_, _ = b.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatID,
+			MessageID: msg.ID,
+			Text:      "🔴 Failed to fetch details: " + err.Error(),
+		})
 		return err
 	}
 
@@ -468,8 +499,9 @@ Account   : %s
 ─────────────────────────
 Add a reason?`, reqID, requester, detail.SafeName, addr)
 
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
+	_, err = b.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID:      chatID,
+		MessageID:   msg.ID,
 		Text:        text,
 		ReplyMarkup: buildConfirmReasonKeyboard(reqID),
 	})
