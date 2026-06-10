@@ -5,11 +5,11 @@ CybArBot is a production-grade, Go-based Telegram chatbot that allows authorised
 ## Features
 
 - **Proactive Notifications**: A built-in watcher polls CyberArk (default every 60s) and proactively pushes alerts for new requests.
-- **Inline Action Keyboards**: Confirm, reject, or view request details directly from notification messages.
-- **Bulk Operations**: Multi-select bulk confirmation and rejection with 'Select All' support and shared reasoning.
-- **Strict Access Control**: Hardened with a strict Telegram User and Group ID whitelist loaded at runtime.
+- **Inline Action Keyboards**: Confirm, reject, or view request details directly from notification messages. Support for fully paginated inline menus (handles >100 requests seamlessly).
+- **Bulk Operations**: Multi-select bulk confirmation and rejection with 'Select All' support, persistent selections across pages, and shared reasoning.
+- **Strict Access Control**: Hardened with a strict Telegram User and Group ID whitelist loaded at runtime, plus webhook secret token validation.
 - **Audit Traceability**: Automatically prefixes all bot-originated actions with `[CybArBot]` to keep a clean, unambiguous CyberArk audit trail when sharing a service account.
-- **Resilient CyberArk Sessions**: Manages token concurrency safely via `sync.RWMutex` with proactive auto-refresh and automatic `401` re-authentication.
+- **Resilient CyberArk Sessions**: Manages token concurrency safely via `sync.RWMutex` with proactive auto-refresh and automatic `401` re-authentication. Async loading UX provides instant feedback even if the CyberArk API is slow.
 - **Dual Transport Modes**: Run via Telegram's Long-Polling (default) or Webhooks (for production).
 
 ## Bot Commands
@@ -19,14 +19,16 @@ CybArBot is a production-grade, Go-based Telegram chatbot that allows authorised
 | `/start` `/help`   | Welcome message and command list                    |
 | `/requests`        | List all pending incoming requests (paginated)      |
 | `/search <query>`  | Search requests by Requester, Address, or Reason    |
-| `/detail <id>`     | Show full confirmation details for a request        |
-| `/confirm <id>`    | Confirm a single request (prompts for optional reason)|
-| `/reject <id>`     | Reject a single request (prompts for mandatory reason)|
+| `/detail [id]`     | Show full confirmation details (paginated menu if no ID)|
+| `/confirm [id]`    | Confirm a single request (paginated menu if no ID)  |
+| `/reject [id]`     | Reject a single request (paginated menu if no ID)   |
 | `/confirmall`      | Multi-select bulk confirmation (paginated, Select All)|
 | `/rejectall`       | Multi-select bulk rejection (paginated, Select All)   |
 | `/status`          | Bot health, session status, active delivery mode    |
 | `/notify_status`   | Notification watcher health, last poll, cache size  |
 | `/cancel`          | Abort any active multi-step operation               |
+
+> 💡 **Group Chat Usage Tip**: By default, Telegram bots operate with "Privacy Mode" enabled in group chats. The bot will only see your messages if they start with a `/` (e.g., `/search <query>`) or if you explicitly use the **Reply** function to respond to a bot's prompt message.
 
 ## Setup & Deployment
 
