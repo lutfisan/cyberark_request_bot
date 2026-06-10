@@ -45,6 +45,10 @@ func NewBot(cfg *config.Config, auth *cyberark.AuthManager, wl *whitelist.Whitel
 		),
 	}
 
+	if cfg.WebhookSecretToken != "" {
+		opts = append(opts, bot.WithWebhookSecretToken(cfg.WebhookSecretToken))
+	}
+
 	// 2. Init Bot instance
 	b, err := bot.New(cfg.TelegramBotToken, opts...)
 	if err != nil {
