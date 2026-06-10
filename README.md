@@ -121,6 +121,31 @@ docker-compose up -d
 ```
 The Docker daemon will automatically bring the bot back up after a reboot.
 
+### 6. Updating the Bot
+
+To update the bot to the latest version, follow these steps depending on your installation method:
+
+**If running natively (Systemd):**
+```bash
+# 1. Pull the latest code
+git pull origin main
+
+# 2. Recompile the bot
+make build
+
+# 3. Restart the service to apply changes
+sudo systemctl restart cybarbot
+```
+
+**If running via Docker:**
+```bash
+# 1. Pull the latest code
+git pull origin main
+
+# 2. Rebuild and restart the container
+docker-compose up -d --build
+```
+
 ## Configuration Reference
 
 Key variables to configure in your `.env` file:
